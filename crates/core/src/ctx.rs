@@ -19,7 +19,12 @@ pub enum Actor {
     /// A human who proved the owner passphrase (CLI unlock or GUI login).
     Owner { session_id: String },
     /// A registered local principal (external agent or browser extension).
-    Agent { id: String, name: String, scopes: Vec<String>, principal_kind: String },
+    Agent {
+        id: String,
+        name: String,
+        scopes: Vec<String>,
+        principal_kind: String,
+    },
     /// A local caller without credentials: public research only.
     Anonymous,
     /// The daemon's own scheduler and job runner.

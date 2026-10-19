@@ -78,7 +78,12 @@ fn op_import(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         return Ok(json!({"id": existing, "duplicate": true, "note": "an identical file is already in the vault"}));
     }
     let id = openclaim_db::new_id();
-    let meta = DocMeta { original_name: name.clone(), original_path: path.to_string_lossy().to_string(), imported_by: ctx.actor_id(), ..Default::default() };
+    let meta = DocMeta {
+        original_name: name.clone(),
+        original_path: path.to_string_lossy().to_string(),
+        imported_by: ctx.actor_id(),
+        ..Default::default()
+    };
     let vault_path = vault_file(ctx, &id);
     if !ctx.dry_run {
         let blob = ctx.svc.vault().encrypt(&bytes);
@@ -87,10 +92,24 @@ fn op_import(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     exec(
         ctx.conn,
         "INSERT INTO documents(id, vault_path, checksum, doc_type, mime, size_bytes, encrypted_metadata, extraction_state, person_id, imported_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8,?9)",
-        (&id, vault_path.to_string_lossy().to_string(), &checksum, doc_type.as_str(), doc_type.mime(&openclaim_extract::extension(&name)), size as i64, ctx.svc.vault().encrypt_str(&serde_json::to_string(&meta)?), &p.person_id, &ctx.now),
+        (
+            &id,
+            vault_path.to_string_lossy().to_string(),
+            &checksum,
+            doc_type.as_str(),
+            doc_type.mime(&openclaim_extract::extension(&name)),
+            size as i64,
+            ctx.svc.vault().encrypt_str(&serde_json::to_string(&meta)?),
+            &p.person_id,
+            &ctx.now,
+        ),
     )?;
     if let Some(pid) = &p.person_id {
-        exec(ctx.conn, "INSERT OR IGNORE INTO document_links(document_id, target_kind, target_id, locator, validated, created_at) VALUES (?1,'person',?2,NULL,1,?3)", (&id, pid, &ctx.now))?;
+        exec(
+            ctx.conn,
+            "INSERT OR IGNORE INTO document_links(document_id, target_kind, target_id, locator, validated, created_at) VALUES (?1,'person',?2,NULL,1,?3)",
+            (&id, pid, &ctx.now),
+        )?;
     }
     let job_id = crate::jobs::enqueue(ctx, "document_extract", json!({"document_id": id}), None)?;
     ctx.audit("documents.import", &id, json!({"doc_type": doc_type.as_str(), "size": size}))?;
@@ -101,10 +120,19 @@ fn op_import(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
 pub fn extract_bytes(svc: &crate::Service, id: &str) -> OcResult<(openclaim_extract::Extraction, bool)> {
     let (vault_path, doc_type, ocr, index) = {
         let guard = svc.inner.db.lock().map_err(|_| OcError::internal("db lock"))?;
-        let row = require(query_one(&guard.conn, "SELECT vault_path, doc_type FROM documents WHERE id = ?1", [id])?, "document", id)?;
+        let row = require(
+            query_one(&guard.conn, "SELECT vault_path, doc_type FROM documents WHERE id = ?1", [id])?,
+            "document",
+            id,
+        )?;
         let ocr = crate::modules::config::get_bool(&guard.conn, "vault.ocr");
         let index = crate::modules::config::get_bool(&guard.conn, "vault.index_text");
-        (row["vault_path"].as_str().unwrap_or("").to_string(), row["doc_type"].as_str().unwrap_or("text").to_string(), ocr, index)
+        (
+            row["vault_path"].as_str().unwrap_or("").to_string(),
+            row["doc_type"].as_str().unwrap_or("text").to_string(),
+            ocr,
+            index,
+        )
     };
     let blob = std::fs::read(&vault_path).map_err(|e| OcError::internal(format!("read vault file: {e}")))?;
     let bytes = svc.vault().decrypt(&blob).map_err(|e| OcError::internal(e.to_string()))?;
@@ -116,7 +144,10 @@ pub fn extract_bytes(svc: &crate::Service, id: &str) -> OcResult<(openclaim_extr
         "mbox" => DocType::Mbox,
         _ => DocType::Text,
     };
-    Ok((openclaim_extract::extract(&bytes, dt, &openclaim_extract::OcrConfig { tesseract: None, enabled: ocr }), index))
+    Ok((
+        openclaim_extract::extract(&bytes, dt, &openclaim_extract::OcrConfig { tesseract: None, enabled: ocr }),
+        index,
+    ))
 }
 
 pub fn store_extraction(ctx: &mut Ctx<'_>, id: &str, ex: &openclaim_extract::Extraction, index: bool) -> OcResult<()> {
@@ -126,20 +157,39 @@ pub fn store_extraction(ctx: &mut Ctx<'_>, id: &str, ex: &openclaim_extract::Ext
     meta.suggestions = ex.suggestions.clone();
     meta.extraction_note = ex.note.clone();
     meta.text_chars = ex.text.chars().count();
-    exec(ctx.conn, "UPDATE documents SET extraction_state = ?2, extraction_note = ?3, encrypted_metadata = ?4, version = version + 1 WHERE id = ?1", (id, &ex.state, &ex.note, ctx.svc.vault().encrypt_str(&serde_json::to_string(&meta)?)))?;
+    exec(
+        ctx.conn,
+        "UPDATE documents SET extraction_state = ?2, extraction_note = ?3, encrypted_metadata = ?4, version = version + 1 WHERE id = ?1",
+        (id, &ex.state, &ex.note, ctx.svc.vault().encrypt_str(&serde_json::to_string(&meta)?)),
+    )?;
     exec(ctx.conn, "DELETE FROM documents_fts WHERE document_id = ?1", [id])?;
     if index && !ex.text.is_empty() {
-        exec(ctx.conn, "INSERT INTO documents_fts(document_id, body) VALUES (?1, ?2)", (id, redact_text(&ex.text)))?;
+        exec(
+            ctx.conn,
+            "INSERT INTO documents_fts(document_id, body) VALUES (?1, ?2)",
+            (id, redact_text(&ex.text)),
+        )?;
     }
-    ctx.emit("document.extracted", json!({"document_id": id, "state": ex.state, "classification": ex.classification}))?;
+    ctx.emit(
+        "document.extracted",
+        json!({"document_id": id, "state": ex.state, "classification": ex.classification}),
+    )?;
     Ok(())
 }
 
 fn view(ctx: &Ctx<'_>, row: Value) -> OcResult<Value> {
     let id = row["id"].as_str().unwrap_or("").to_string();
     let meta = meta_of(ctx, &row)?;
-    let links = query_all(ctx.conn, "SELECT target_kind, target_id, locator, validated FROM document_links WHERE document_id = ?1", [&id])?;
-    let name = if ctx.actor.is_owner() { json!(meta.original_name) } else { json!(format!("document {}", &id[..8])) };
+    let links = query_all(
+        ctx.conn,
+        "SELECT target_kind, target_id, locator, validated FROM document_links WHERE document_id = ?1",
+        [&id],
+    )?;
+    let name = if ctx.actor.is_owner() {
+        json!(meta.original_name)
+    } else {
+        json!(format!("document {}", &id[..8]))
+    };
     Ok(json!({
         "id": id,
         "name": name,
@@ -169,8 +219,19 @@ fn op_list(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: P = parse_params(p)?;
     let pager = Pager::from(&p.page, &ctx.now)?;
     let rows = match &p.person_id {
-        Some(pid) => query_all(ctx.conn, &format!("SELECT * FROM documents WHERE person_id = ?1 AND imported_at <= ?2 ORDER BY imported_at DESC{}", pager.sql_limit()), (pid, &pager.snapshot))?,
-        None => query_all(ctx.conn, &format!("SELECT * FROM documents WHERE imported_at <= ?1 ORDER BY imported_at DESC{}", pager.sql_limit()), [&pager.snapshot])?,
+        Some(pid) => query_all(
+            ctx.conn,
+            &format!(
+                "SELECT * FROM documents WHERE person_id = ?1 AND imported_at <= ?2 ORDER BY imported_at DESC{}",
+                pager.sql_limit()
+            ),
+            (pid, &pager.snapshot),
+        )?,
+        None => query_all(
+            ctx.conn,
+            &format!("SELECT * FROM documents WHERE imported_at <= ?1 ORDER BY imported_at DESC{}", pager.sql_limit()),
+            [&pager.snapshot],
+        )?,
     };
     let items = rows.into_iter().map(|r| view(ctx, r)).collect::<OcResult<Vec<_>>>()?;
     Ok(pager.wrap(items, None))
@@ -184,7 +245,11 @@ fn op_show(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
 
 fn op_extract(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: IdParam = parse_params(p)?;
-    require(scalar::<String, _>(ctx.conn, "SELECT id FROM documents WHERE id = ?1", [&p.id])?, "document", &p.id)?;
+    require(
+        scalar::<String, _>(ctx.conn, "SELECT id FROM documents WHERE id = ?1", [&p.id])?,
+        "document",
+        &p.id,
+    )?;
     let job_id = crate::jobs::enqueue(ctx, "document_extract", json!({"document_id": p.id}), None)?;
     Ok(json!({"document_id": p.id, "job_id": job_id, "status": "queued"}))
 }
@@ -199,7 +264,9 @@ fn op_suggestions(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         .iter()
         .map(|s| json!({"kind": s.kind, "value": if ctx.actor.is_owner() { s.value.clone() } else { redact_text(&s.value) }, "span_start": s.span_start, "span_end": s.span_end, "excerpt": if ctx.actor.is_owner() { s.excerpt.clone() } else { redact_text(&s.excerpt) }}))
         .collect();
-    Ok(json!({"document_id": p.id, "classification": meta.classification, "suggestions": suggestions, "trust": "deterministic_evaluation", "note": "pattern suggestions with source spans; confirm as facts only if true"}))
+    Ok(
+        json!({"document_id": p.id, "classification": meta.classification, "suggestions": suggestions, "trust": "deterministic_evaluation", "note": "pattern suggestions with source spans; confirm as facts only if true"}),
+    )
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -218,7 +285,10 @@ fn op_search(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     }
     let rows = query_all(
         ctx.conn,
-        &format!("SELECT d.id, d.doc_type, d.extraction_state, d.person_id, d.imported_at, snippet(documents_fts, 1, '[', ']', '…', 12) AS snippet FROM documents_fts f JOIN documents d ON d.id = f.document_id WHERE documents_fts MATCH ?1 AND d.imported_at <= ?2 ORDER BY rank{}", pager.sql_limit()),
+        &format!(
+            "SELECT d.id, d.doc_type, d.extraction_state, d.person_id, d.imported_at, snippet(documents_fts, 1, '[', ']', '…', 12) AS snippet FROM documents_fts f JOIN documents d ON d.id = f.document_id WHERE documents_fts MATCH ?1 AND d.imported_at <= ?2 ORDER BY rank{}",
+            pager.sql_limit()
+        ),
         (&fq, &pager.snapshot),
     )?;
     let mut items = Vec::new();
@@ -246,7 +316,11 @@ pub struct ExcerptParams {
 
 fn op_excerpt(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: ExcerptParams = parse_params(p)?;
-    require(scalar::<String, _>(ctx.conn, "SELECT id FROM documents WHERE id = ?1", [&p.id])?, "document", &p.id)?;
+    require(
+        scalar::<String, _>(ctx.conn, "SELECT id FROM documents WHERE id = ?1", [&p.id])?,
+        "document",
+        &p.id,
+    )?;
     let body: Option<String> = scalar(ctx.conn, "SELECT body FROM documents_fts WHERE document_id = ?1", [&p.id])?;
     let Some(body) = body else {
         return Ok(json!({"document_id": p.id, "text": null, "note": "no extracted text (extraction pending, empty, or indexing disabled)"}));
@@ -257,7 +331,9 @@ fn op_excerpt(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let end = (start + len).min(chars.len());
     let text: String = chars[start..end].iter().collect();
     ctx.disclose("document", &p.id, &format!("excerpt {start}-{end}"))?;
-    Ok(json!({"document_id": p.id, "offset": start, "end": end, "total_chars": chars.len(), "text": openclaim_security::sanitize::untrusted(&text, &format!("vault document {}", p.id), 4000), "redacted": true}))
+    Ok(
+        json!({"document_id": p.id, "offset": start, "end": end, "total_chars": chars.len(), "text": openclaim_security::sanitize::untrusted(&text, &format!("vault document {}", p.id), 4000), "redacted": true}),
+    )
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -272,7 +348,11 @@ pub struct LinkParams {
 
 fn op_link(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: LinkParams = parse_params(p)?;
-    require(scalar::<String, _>(ctx.conn, "SELECT id FROM documents WHERE id = ?1", [&p.document_id])?, "document", &p.document_id)?;
+    require(
+        scalar::<String, _>(ctx.conn, "SELECT id FROM documents WHERE id = ?1", [&p.document_id])?,
+        "document",
+        &p.document_id,
+    )?;
     let table = match p.target_kind.as_str() {
         "claim" => "claims",
         "fact" => "consumer_facts",
@@ -280,16 +360,28 @@ fn op_link(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         "person" => "people",
         _ => return Err(OcError::invalid("target_kind must be claim, fact, opportunity or person")),
     };
-    require(scalar::<String, _>(ctx.conn, &format!("SELECT id FROM {table} WHERE id = ?1"), [&p.target_id])?, &p.target_kind, &p.target_id)?;
+    require(
+        scalar::<String, _>(ctx.conn, &format!("SELECT id FROM {table} WHERE id = ?1"), [&p.target_id])?,
+        &p.target_kind,
+        &p.target_id,
+    )?;
     let validated = ctx.actor.is_owner();
-    exec(ctx.conn, "INSERT OR REPLACE INTO document_links(document_id, target_kind, target_id, locator, validated, created_at) VALUES (?1,?2,?3,?4,?5,?6)", (&p.document_id, &p.target_kind, &p.target_id, &p.locator, validated as i32, &ctx.now))?;
-    Ok(json!({"document_id": p.document_id, "target_kind": p.target_kind, "target_id": p.target_id, "validated": validated, "note": if validated { "linked" } else { "linked as unvalidated; the owner validates before it counts as proof" }}))
+    exec(
+        ctx.conn,
+        "INSERT OR REPLACE INTO document_links(document_id, target_kind, target_id, locator, validated, created_at) VALUES (?1,?2,?3,?4,?5,?6)",
+        (&p.document_id, &p.target_kind, &p.target_id, &p.locator, validated as i32, &ctx.now),
+    )?;
+    Ok(
+        json!({"document_id": p.document_id, "target_kind": p.target_kind, "target_id": p.target_id, "validated": validated, "note": if validated { "linked" } else { "linked as unvalidated; the owner validates before it counts as proof" }}),
+    )
 }
 
 fn op_redact(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: IdParam = parse_params(p)?;
     let body: Option<String> = scalar(ctx.conn, "SELECT body FROM documents_fts WHERE document_id = ?1", [&p.id])?;
-    let Some(body) = body else { return Err(OcError::not_found("no indexed text for this document")) };
+    let Some(body) = body else {
+        return Err(OcError::not_found("no indexed text for this document"));
+    };
     let redacted = redact_text(&body);
     exec(ctx.conn, "DELETE FROM documents_fts WHERE document_id = ?1", [&p.id])?;
     exec(ctx.conn, "INSERT INTO documents_fts(document_id, body) VALUES (?1, ?2)", (&p.id, &redacted))?;
@@ -330,7 +422,11 @@ fn op_delete(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     if !p.confirm {
         return Err(OcError::invalid("pass confirm=true to permanently delete this document"));
     }
-    let row = require(query_one(ctx.conn, "SELECT vault_path FROM documents WHERE id = ?1", [&p.id])?, "document", &p.id)?;
+    let row = require(
+        query_one(ctx.conn, "SELECT vault_path FROM documents WHERE id = ?1", [&p.id])?,
+        "document",
+        &p.id,
+    )?;
     exec(ctx.conn, "DELETE FROM documents_fts WHERE document_id = ?1", [&p.id])?;
     exec(ctx.conn, "DELETE FROM documents WHERE id = ?1", [&p.id])?;
     if !ctx.dry_run {
@@ -342,16 +438,98 @@ fn op_delete(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
 
 pub fn ops() -> Vec<OpSpec> {
     vec![
-        op!("documents.import", "documents.import", Elevated, "Import a local file into the encrypted vault and queue extraction", ImportParams, op_import),
-        op!("documents.list", "documents.metadata", Read, "List vault documents (metadata only)", PageParams, op_list, mcp = "list_document_metadata"),
-        op!("documents.show", "documents.metadata", Read, "Document metadata, extraction state and links", IdParam, op_show, resource = "id"),
-        op!("documents.extract", "documents.import", Write, "Re-run on-device extraction", IdParam, op_extract),
-        op!("documents.suggestions", "documents.read", Read, "Deterministic fact suggestions with source spans", IdParam, op_suggestions, resource = "id"),
-        op!("documents.search", "documents.read", Read, "Local full-text search over redacted extracted text", SearchParams, op_search),
-        op!("documents.excerpt", "documents.read", Read, "Bounded, redacted excerpt of extracted text", ExcerptParams, op_excerpt, resource = "id", mcp = "read_document_excerpt"),
-        op!("documents.link", "documents.metadata", Write, "Link a document to a claim, fact, opportunity or person", LinkParams, op_link),
-        op!("documents.redact", "documents.import", Write, "Re-apply identifier redaction to the indexed text", IdParam, op_redact),
-        op!("documents.export", "data.export", Elevated, "Decrypt a document to a path you choose", ExportParams, op_export),
-        op!("documents.delete", "documents.delete", Elevated, "Permanently delete a document and its index", DeleteParams, op_delete),
+        op!(
+            "documents.import",
+            "documents.import",
+            Elevated,
+            "Import a local file into the encrypted vault and queue extraction",
+            ImportParams,
+            op_import
+        ),
+        op!(
+            "documents.list",
+            "documents.metadata",
+            Read,
+            "List vault documents (metadata only)",
+            PageParams,
+            op_list,
+            mcp = "list_document_metadata"
+        ),
+        op!(
+            "documents.show",
+            "documents.metadata",
+            Read,
+            "Document metadata, extraction state and links",
+            IdParam,
+            op_show,
+            resource = "id"
+        ),
+        op!(
+            "documents.extract",
+            "documents.import",
+            Write,
+            "Re-run on-device extraction",
+            IdParam,
+            op_extract
+        ),
+        op!(
+            "documents.suggestions",
+            "documents.read",
+            Read,
+            "Deterministic fact suggestions with source spans",
+            IdParam,
+            op_suggestions,
+            resource = "id"
+        ),
+        op!(
+            "documents.search",
+            "documents.read",
+            Read,
+            "Local full-text search over redacted extracted text",
+            SearchParams,
+            op_search
+        ),
+        op!(
+            "documents.excerpt",
+            "documents.read",
+            Read,
+            "Bounded, redacted excerpt of extracted text",
+            ExcerptParams,
+            op_excerpt,
+            resource = "id",
+            mcp = "read_document_excerpt"
+        ),
+        op!(
+            "documents.link",
+            "documents.metadata",
+            Write,
+            "Link a document to a claim, fact, opportunity or person",
+            LinkParams,
+            op_link
+        ),
+        op!(
+            "documents.redact",
+            "documents.import",
+            Write,
+            "Re-apply identifier redaction to the indexed text",
+            IdParam,
+            op_redact
+        ),
+        op!(
+            "documents.export",
+            "data.export",
+            Elevated,
+            "Decrypt a document to a path you choose",
+            ExportParams,
+            op_export
+        ),
+        op!(
+            "documents.delete",
+            "documents.delete",
+            Elevated,
+            "Permanently delete a document and its index",
+            DeleteParams,
+            op_delete
+        ),
     ]
 }

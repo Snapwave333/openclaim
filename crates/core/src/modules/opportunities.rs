@@ -124,19 +124,28 @@ pub fn search(ctx: &Ctx<'_>, mut q: OpportunityQuery) -> OcResult<Value> {
         let pid = q.person_id.clone().ok_or_else(|| OcError::invalid("match_state needs person_id"))?;
         ctx.require_scope("match.evaluate", None)?;
         sql.push_str(", mt.assessment AS match_state, mt.stale AS match_stale");
-        from.push_str(&format!(" JOIN matches mt ON mt.opportunity_id = o.id AND mt.person_id = {}", push(&mut params, SqlValue::Text(pid))));
+        from.push_str(&format!(
+            " JOIN matches mt ON mt.opportunity_id = o.id AND mt.person_id = {}",
+            push(&mut params, SqlValue::Text(pid))
+        ));
         wheres.push(format!("mt.assessment = {}", push(&mut params, SqlValue::Text(ms.clone()))));
     } else if let Some(pid) = &q.person_id {
         ctx.require_scope("match.evaluate", None)?;
         sql.push_str(", mt.assessment AS match_state, mt.stale AS match_stale");
-        from.push_str(&format!(" LEFT JOIN matches mt ON mt.opportunity_id = o.id AND mt.person_id = {}", push(&mut params, SqlValue::Text(pid.clone()))));
+        from.push_str(&format!(
+            " LEFT JOIN matches mt ON mt.opportunity_id = o.id AND mt.person_id = {}",
+            push(&mut params, SqlValue::Text(pid.clone()))
+        ));
     }
     if let Some(text) = q.q.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         let fq = fts_query(text);
         if fq.is_empty() {
             wheres.push(format!("o.title LIKE {} ESCAPE '\\'", push(&mut params, SqlValue::Text(like_pattern(text)))));
         } else {
-            wheres.push(format!("o.id IN (SELECT opportunity_id FROM opportunities_fts WHERE opportunities_fts MATCH {})", push(&mut params, SqlValue::Text(fq))));
+            wheres.push(format!(
+                "o.id IN (SELECT opportunity_id FROM opportunities_fts WHERE opportunities_fts MATCH {})",
+                push(&mut params, SqlValue::Text(fq))
+            ));
         }
     }
     if !q.status.is_empty() {
@@ -151,7 +160,10 @@ pub fn search(ctx: &Ctx<'_>, mut q: OpportunityQuery) -> OcResult<Value> {
         wheres.push("o.verification_state = 'verified'".into());
     }
     if let Some(st) = &q.state {
-        wheres.push(format!("(o.jurisdictions_json LIKE {} OR o.jurisdictions_json LIKE '%\"US\"%')", push(&mut params, SqlValue::Text(format!("%\"{}\"%", st.to_uppercase())))));
+        wheres.push(format!(
+            "(o.jurisdictions_json LIKE {} OR o.jurisdictions_json LIKE '%\"US\"%')",
+            push(&mut params, SqlValue::Text(format!("%\"{}\"%", st.to_uppercase())))
+        ));
     }
     if let Some(d) = &q.deadline_after {
         openclaim_domain::dates::parse_date(d)?;
@@ -174,7 +186,10 @@ pub fn search(ctx: &Ctx<'_>, mut q: OpportunityQuery) -> OcResult<Value> {
         wheres.push(format!("o.opp_type = {}", push(&mut params, SqlValue::Text(v.clone()))));
     }
     if let Some(v) = &q.administrator {
-        wheres.push(format!("o.administrator LIKE {} ESCAPE '\\'", push(&mut params, SqlValue::Text(like_pattern(v)))));
+        wheres.push(format!(
+            "o.administrator LIKE {} ESCAPE '\\'",
+            push(&mut params, SqlValue::Text(like_pattern(v)))
+        ));
     }
     if let Some(v) = &q.source_id {
         wheres.push(format!("o.source_id = {}", push(&mut params, SqlValue::Text(v.clone()))));
@@ -202,18 +217,21 @@ pub fn search(ctx: &Ctx<'_>, mut q: OpportunityQuery) -> OcResult<Value> {
     let count_sql = format!("SELECT count(*){from} WHERE {}", wheres.join(" AND "));
     let total: i64 = {
         let mut stmt = ctx.conn.prepare(&count_sql).map_err(openclaim_db::db_err)?;
-        stmt.query_row(openclaim_db::rusqlite::params_from_iter(params.iter()), |r| r.get(0)).map_err(openclaim_db::db_err)?
+        stmt.query_row(openclaim_db::rusqlite::params_from_iter(params.iter()), |r| r.get(0))
+            .map_err(openclaim_db::db_err)?
     };
     let full = format!("{sql}{from} WHERE {} ORDER BY {order}{}", wheres.join(" AND "), pager.sql_limit());
     let mut stmt = ctx.conn.prepare(&full).map_err(openclaim_db::db_err)?;
-    let rows = stmt.query_map(openclaim_db::rusqlite::params_from_iter(params.iter()), crate::sql::row_json).map_err(openclaim_db::db_err)?;
+    let rows = stmt
+        .query_map(openclaim_db::rusqlite::params_from_iter(params.iter()), crate::sql::row_json)
+        .map_err(openclaim_db::db_err)?;
     let mut items: Vec<Value> = rows.map(|r| r.map_err(openclaim_db::db_err)).collect::<OcResult<_>>()?;
     for it in &mut items {
         decorate(it);
-        if !q.fields.is_empty() {
-            if let Some(o) = it.as_object_mut() {
-                o.retain(|k, _| q.fields.iter().any(|f| f == k) || k == "id");
-            }
+        if !q.fields.is_empty()
+            && let Some(o) = it.as_object_mut()
+        {
+            o.retain(|k, _| q.fields.iter().any(|f| f == k) || k == "id");
         }
     }
     let mut out = pager.wrap(items, Some(total as u64));
@@ -227,20 +245,27 @@ pub fn decorate(it: &mut Value) {
     let tier = it["authority_tier"].as_str().unwrap_or("B").to_string();
     let deadline = it["claim_deadline"].as_str().map(str::to_string);
     if let Some(o) = it.as_object_mut() {
-        o.insert("trust".into(), json!({
-            "primary_source": tier == "A",
-            "verified_on": o.get("verified_at").cloned().unwrap_or(Value::Null),
-            "verification_state": vs,
-            "claim_deadline": deadline,
-            "deadline_verified": o.get("deadline_verified").cloned().unwrap_or(json!(false)),
-            "eligibility_note": "Eligibility still requires review",
-        }));
+        o.insert(
+            "trust".into(),
+            json!({
+                "primary_source": tier == "A",
+                "verified_on": o.get("verified_at").cloned().unwrap_or(Value::Null),
+                "verification_state": vs,
+                "claim_deadline": deadline,
+                "deadline_verified": o.get("deadline_verified").cloned().unwrap_or(json!(false)),
+                "eligibility_note": "Eligibility still requires review",
+            }),
+        );
     }
 }
 
 fn load(ctx: &Ctx<'_>, id: &str) -> OcResult<Value> {
     let mut row = require(
-        query_one(ctx.conn, "SELECT o.*, COALESCE(m.bookmarked,0) AS bookmarked, COALESCE(m.hidden,0) AS hidden, s.health AS source_health, s.name AS source_name FROM opportunities o LEFT JOIN opportunity_marks m ON m.opportunity_id = o.id LEFT JOIN sources s ON s.id = o.source_id WHERE o.id = ?1", [id])?,
+        query_one(
+            ctx.conn,
+            "SELECT o.*, COALESCE(m.bookmarked,0) AS bookmarked, COALESCE(m.hidden,0) AS hidden, s.health AS source_health, s.name AS source_name FROM opportunities o LEFT JOIN opportunity_marks m ON m.opportunity_id = o.id LEFT JOIN sources s ON s.id = o.source_id WHERE o.id = ?1",
+            [id],
+        )?,
         "opportunity",
         id,
     )?;
@@ -260,12 +285,20 @@ pub struct ShowParams {
 }
 
 pub fn current_rules(conn: &openclaim_db::rusqlite::Connection, opportunity_id: &str) -> OcResult<Option<(i64, RuleSet, String)>> {
-    let row = query_one(conn, "SELECT version, criteria_ast_json, original_text_excerpt FROM opportunity_rules WHERE opportunity_id = ?1 ORDER BY version DESC LIMIT 1", [opportunity_id])?;
+    let row = query_one(
+        conn,
+        "SELECT version, criteria_ast_json, original_text_excerpt FROM opportunity_rules WHERE opportunity_id = ?1 ORDER BY version DESC LIMIT 1",
+        [opportunity_id],
+    )?;
     match row {
         None => Ok(None),
         Some(r) => {
             let rules: RuleSet = serde_json::from_value(r["criteria_ast"].clone())?;
-            Ok(Some((r["version"].as_i64().unwrap_or(1), rules, r["original_text_excerpt"].as_str().unwrap_or("").to_string())))
+            Ok(Some((
+                r["version"].as_i64().unwrap_or(1),
+                rules,
+                r["original_text_excerpt"].as_str().unwrap_or("").to_string(),
+            )))
         }
     }
 }
@@ -286,8 +319,16 @@ fn provenance(ctx: &Ctx<'_>, id: &str) -> OcResult<Value> {
             e
         })
         .collect();
-    let changes = query_all(ctx.conn, "SELECT field, old_value, new_value, detected_at, reviewed_at FROM opportunity_changes WHERE opportunity_id = ?1 ORDER BY detected_at DESC LIMIT 100", [id])?;
-    let aliases = query_all(ctx.conn, "SELECT source_id, external_key, title FROM opportunity_aliases WHERE opportunity_id = ?1", [id])?;
+    let changes = query_all(
+        ctx.conn,
+        "SELECT field, old_value, new_value, detected_at, reviewed_at FROM opportunity_changes WHERE opportunity_id = ?1 ORDER BY detected_at DESC LIMIT 100",
+        [id],
+    )?;
+    let aliases = query_all(
+        ctx.conn,
+        "SELECT source_id, external_key, title FROM opportunity_aliases WHERE opportunity_id = ?1",
+        [id],
+    )?;
     Ok(json!({"evidence": labeled, "changes": changes, "aliases": aliases}))
 }
 
@@ -305,7 +346,11 @@ fn op_show(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         out["provenance"] = provenance(ctx, &p.id)?;
     }
     if inc("matches") && ctx.actor.has_scope("match.evaluate", None) {
-        out["matches"] = json!(query_all(ctx.conn, "SELECT person_id, assessment, stale, evaluated_at FROM matches WHERE opportunity_id = ?1", [&p.id])?);
+        out["matches"] = json!(query_all(
+            ctx.conn,
+            "SELECT person_id, assessment, stale, evaluated_at FROM matches WHERE opportunity_id = ?1",
+            [&p.id]
+        )?);
     }
     Ok(out)
 }
@@ -361,8 +406,26 @@ fn op_compare(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         r["rules_version"] = json!(current_rules(ctx.conn, id)?.map(|r| r.0));
         rows.push(r);
     }
-    let fields = ["title", "status", "verification_state", "claim_deadline", "deadline_verified", "class_period_start", "class_period_end", "administrator", "claim_method", "proof_required", "official_url", "claim_url", "benefit", "rules_version"];
-    let table: Vec<Value> = fields.iter().map(|f| json!({"field": f, "values": rows.iter().map(|r| r[*f].clone()).collect::<Vec<_>>()})).collect();
+    let fields = [
+        "title",
+        "status",
+        "verification_state",
+        "claim_deadline",
+        "deadline_verified",
+        "class_period_start",
+        "class_period_end",
+        "administrator",
+        "claim_method",
+        "proof_required",
+        "official_url",
+        "claim_url",
+        "benefit",
+        "rules_version",
+    ];
+    let table: Vec<Value> = fields
+        .iter()
+        .map(|f| json!({"field": f, "values": rows.iter().map(|r| r[*f].clone()).collect::<Vec<_>>()}))
+        .collect();
     Ok(json!({"ids": p.ids, "comparison": table}))
 }
 
@@ -379,7 +442,10 @@ fn op_history(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let since = openclaim_domain::dates::format_ts(time::OffsetDateTime::now_utc() - time::Duration::days(p.days.unwrap_or(30) as i64));
     let rows = query_all(
         ctx.conn,
-        &format!("SELECT c.opportunity_id, o.title, c.field, c.old_value, c.new_value, c.detected_at FROM opportunity_changes c JOIN opportunities o ON o.id = c.opportunity_id WHERE c.detected_at >= ?1 AND c.detected_at <= ?2 ORDER BY c.detected_at DESC{}", pager.sql_limit()),
+        &format!(
+            "SELECT c.opportunity_id, o.title, c.field, c.old_value, c.new_value, c.detected_at FROM opportunity_changes c JOIN opportunities o ON o.id = c.opportunity_id WHERE c.detected_at >= ?1 AND c.detected_at <= ?2 ORDER BY c.detected_at DESC{}",
+            pager.sql_limit()
+        ),
         (&since, &pager.snapshot),
     )?;
     Ok(pager.wrap(rows, None))
@@ -387,16 +453,24 @@ fn op_history(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
 
 fn op_watch(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
     let seq: i64 = scalar(ctx.conn, "SELECT COALESCE(max(seq),0) FROM events", [])?.unwrap_or(0);
-    Ok(json!({"after_seq": seq, "topics": ["opportunity.new", "opportunity.changed", "source.failed", "alert.due"], "next_action": "poll events.poll with after_seq, or run `openclaim discover watch` which streams NDJSON"}))
+    Ok(
+        json!({"after_seq": seq, "topics": ["opportunity.new", "opportunity.changed", "source.failed", "alert.due"], "next_action": "poll events.poll with after_seq, or run `openclaim discover watch` which streams NDJSON"}),
+    )
 }
 
 fn op_rules(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: IdParam = parse_params(p)?;
     load(ctx, &p.id)?;
-    let history = query_all(ctx.conn, "SELECT version, curated_by, created_at, original_text_excerpt FROM opportunity_rules WHERE opportunity_id = ?1 ORDER BY version DESC", [&p.id])?;
+    let history = query_all(
+        ctx.conn,
+        "SELECT version, curated_by, created_at, original_text_excerpt FROM opportunity_rules WHERE opportunity_id = ?1 ORDER BY version DESC",
+        [&p.id],
+    )?;
     Ok(match current_rules(ctx.conn, &p.id)? {
         Some((v, r, ex)) => json!({"opportunity_id": p.id, "version": v, "rules": r, "original_text_excerpt": ex, "history": history}),
-        None => json!({"opportunity_id": p.id, "version": null, "rules": null, "history": history, "note": "no verified structured rules; add them with opportunities.set_rules citing the official text"}),
+        None => {
+            json!({"opportunity_id": p.id, "version": null, "rules": null, "history": history, "note": "no verified structured rules; add them with opportunities.set_rules citing the official text"})
+        }
     })
 }
 
@@ -418,13 +492,31 @@ fn op_set_rules(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     if p.original_text_excerpt.trim().len() < 20 {
         return Err(OcError::invalid("original_text_excerpt must quote the official eligibility text"));
     }
-    let version: i64 = scalar::<i64, _>(ctx.conn, "SELECT COALESCE(max(version),0) FROM opportunity_rules WHERE opportunity_id = ?1", [&p.opportunity_id])?.unwrap_or(0) + 1;
+    let version: i64 = scalar::<i64, _>(
+        ctx.conn,
+        "SELECT COALESCE(max(version),0) FROM opportunity_rules WHERE opportunity_id = ?1",
+        [&p.opportunity_id],
+    )?
+    .unwrap_or(0)
+        + 1;
     exec(
         ctx.conn,
         "INSERT INTO opportunity_rules(opportunity_id, version, criteria_ast_json, original_text_excerpt, evidence_id, curated_by, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-        (&p.opportunity_id, version, serde_json::to_string(&p.rules)?, &p.original_text_excerpt, &p.evidence_id, ctx.actor_id(), &ctx.now),
+        (
+            &p.opportunity_id,
+            version,
+            serde_json::to_string(&p.rules)?,
+            &p.original_text_excerpt,
+            &p.evidence_id,
+            ctx.actor_id(),
+            &ctx.now,
+        ),
     )?;
-    exec(ctx.conn, "UPDATE opportunities SET version = version + 1, updated_at = ?2 WHERE id = ?1", (&p.opportunity_id, &ctx.now))?;
+    exec(
+        ctx.conn,
+        "UPDATE opportunities SET version = version + 1, updated_at = ?2 WHERE id = ?1",
+        (&p.opportunity_id, &ctx.now),
+    )?;
     exec(ctx.conn, "UPDATE matches SET stale = 1 WHERE opportunity_id = ?1", [&p.opportunity_id])?;
     crate::jobs::enqueue(ctx, "match_refresh", json!({"opportunity_id": p.opportunity_id}), None)?;
     ctx.emit("opportunity.rules_changed", json!({"opportunity_id": p.opportunity_id, "version": version}))?;
@@ -440,7 +532,11 @@ fn op_sources(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
 fn op_changes(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: IdParam = parse_params(p)?;
     load(ctx, &p.id)?;
-    let rows = query_all(ctx.conn, "SELECT id, field, old_value, new_value, snapshot_id, detected_at, reviewed_at FROM opportunity_changes WHERE opportunity_id = ?1 ORDER BY detected_at DESC", [&p.id])?;
+    let rows = query_all(
+        ctx.conn,
+        "SELECT id, field, old_value, new_value, snapshot_id, detected_at, reviewed_at FROM opportunity_changes WHERE opportunity_id = ?1 ORDER BY detected_at DESC",
+        [&p.id],
+    )?;
     Ok(json!({"opportunity_id": p.id, "changes": rows}))
 }
 
@@ -462,8 +558,16 @@ fn op_verify(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
             return Err(OcError::policy("cannot mark verified without at least one evidence link to a source snapshot"));
         }
     }
-    exec(ctx.conn, "UPDATE opportunities SET verification_state = ?2, verified_at = CASE WHEN ?2 = 'verified' THEN ?3 ELSE verified_at END, version = version + 1, updated_at = ?3 WHERE id = ?1", (&p.id, state.as_str(), &ctx.now))?;
-    exec(ctx.conn, "UPDATE opportunity_changes SET reviewed_at = ?2 WHERE opportunity_id = ?1 AND reviewed_at IS NULL", (&p.id, &ctx.now))?;
+    exec(
+        ctx.conn,
+        "UPDATE opportunities SET verification_state = ?2, verified_at = CASE WHEN ?2 = 'verified' THEN ?3 ELSE verified_at END, version = version + 1, updated_at = ?3 WHERE id = ?1",
+        (&p.id, state.as_str(), &ctx.now),
+    )?;
+    exec(
+        ctx.conn,
+        "UPDATE opportunity_changes SET reviewed_at = ?2 WHERE opportunity_id = ?1 AND reviewed_at IS NULL",
+        (&p.id, &ctx.now),
+    )?;
     ctx.audit("opportunities.verify", &p.id, json!({"state": p.state, "note": p.note}))?;
     Ok(json!({"id": p.id, "verification_state": state.as_str()}))
 }
@@ -484,7 +588,9 @@ fn set_mark(ctx: &mut Ctx<'_>, p: Value, col: &str) -> OcResult<Value> {
     load(ctx, &p.id)?;
     exec(
         ctx.conn,
-        &format!("INSERT INTO opportunity_marks(opportunity_id, {col}, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(opportunity_id) DO UPDATE SET {col} = excluded.{col}, updated_at = excluded.updated_at"),
+        &format!(
+            "INSERT INTO opportunity_marks(opportunity_id, {col}, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(opportunity_id) DO UPDATE SET {col} = excluded.{col}, updated_at = excluded.updated_at"
+        ),
         (&p.id, p.on as i32, &ctx.now),
     )?;
     if col == "bookmarked" && p.on {
@@ -511,8 +617,16 @@ fn op_report(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: ReportParams = parse_params(p)?;
     load(ctx, &p.id)?;
     let rid = openclaim_db::new_id();
-    exec(ctx.conn, "INSERT INTO opportunity_reports(id, opportunity_id, reason, reported_by, created_at) VALUES (?1,?2,?3,?4,?5)", (&rid, &p.id, openclaim_security::sanitize::clean_text(&p.reason, 2000), ctx.actor_id(), &ctx.now))?;
-    exec(ctx.conn, "UPDATE opportunities SET verification_state = CASE WHEN verification_state = 'verified' THEN 'disputed' ELSE verification_state END WHERE id = ?1", [&p.id])?;
+    exec(
+        ctx.conn,
+        "INSERT INTO opportunity_reports(id, opportunity_id, reason, reported_by, created_at) VALUES (?1,?2,?3,?4,?5)",
+        (&rid, &p.id, openclaim_security::sanitize::clean_text(&p.reason, 2000), ctx.actor_id(), &ctx.now),
+    )?;
+    exec(
+        ctx.conn,
+        "UPDATE opportunities SET verification_state = CASE WHEN verification_state = 'verified' THEN 'disputed' ELSE verification_state END WHERE id = ?1",
+        [&p.id],
+    )?;
     Ok(json!({"report_id": rid, "note": "the record is shown as disputed until the owner re-verifies it"}))
 }
 
@@ -543,9 +657,20 @@ pub fn to_csv(items: &[Value], columns: &[&str]) -> String {
 }
 
 pub fn to_markdown(items: &[Value], columns: &[&str]) -> String {
-    let mut out = format!("| {} |\n|{}|\n", columns.join(" | "), columns.iter().map(|_| "---").collect::<Vec<_>>().join("|"));
+    let mut out = format!(
+        "| {} |\n|{}|\n",
+        columns.join(" | "),
+        columns.iter().map(|_| "---").collect::<Vec<_>>().join("|")
+    );
     for it in items {
-        let cells: Vec<String> = columns.iter().map(|c| match &it[*c] { Value::Null => String::new(), Value::String(s) => s.replace('|', "\\|"), o => o.to_string() }).collect();
+        let cells: Vec<String> = columns
+            .iter()
+            .map(|c| match &it[*c] {
+                Value::Null => String::new(),
+                Value::String(s) => s.replace('|', "\\|"),
+                o => o.to_string(),
+            })
+            .collect();
         out.push_str(&format!("| {} |\n", cells.join(" | ")));
     }
     out
@@ -557,7 +682,19 @@ fn op_export(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     q.page.limit = Some(500);
     let res = search(ctx, q)?;
     let items = res["items"].as_array().cloned().unwrap_or_default();
-    let cols = ["id", "title", "status", "verification_state", "claim_deadline", "deadline_verified", "administrator", "official_url", "claim_url", "source_id", "verified_at"];
+    let cols = [
+        "id",
+        "title",
+        "status",
+        "verification_state",
+        "claim_deadline",
+        "deadline_verified",
+        "administrator",
+        "official_url",
+        "claim_url",
+        "source_id",
+        "verified_at",
+    ];
     Ok(match p.format.as_deref().unwrap_or("json") {
         "csv" => json!({"format": "csv", "content": to_csv(&items, &cols), "count": items.len()}),
         "markdown" => json!({"format": "markdown", "content": to_markdown(&items, &cols), "count": items.len()}),
@@ -580,37 +717,193 @@ fn op_tip_submit(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         return Err(OcError::invalid("tip URL must be an http(s) link to a named host"));
     }
     let id = openclaim_db::new_id();
-    exec(ctx.conn, "INSERT INTO tips(id, url, title, note, submitted_by, state, created_at) VALUES (?1,?2,?3,?4,?5,'quarantined',?6)", (&id, &p.url, p.title.map(|t| openclaim_security::sanitize::clean_text(&t, 300)), p.note.map(|n| openclaim_security::sanitize::clean_text(&n, 2000)), ctx.actor_id(), &ctx.now))?;
+    exec(
+        ctx.conn,
+        "INSERT INTO tips(id, url, title, note, submitted_by, state, created_at) VALUES (?1,?2,?3,?4,?5,'quarantined',?6)",
+        (
+            &id,
+            &p.url,
+            p.title.map(|t| openclaim_security::sanitize::clean_text(&t, 300)),
+            p.note.map(|n| openclaim_security::sanitize::clean_text(&n, 2000)),
+            ctx.actor_id(),
+            &ctx.now,
+        ),
+    )?;
     Ok(json!({"tip_id": id, "state": "quarantined", "note": "tips stay quarantined until a primary source corroborates them"}))
 }
 
 fn op_tip_list(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: PageParams = parse_params(p)?;
     let pager = Pager::from(&p, &ctx.now)?;
-    let rows = query_all(ctx.conn, &format!("SELECT id, url, title, note, submitted_by, state, opportunity_id, created_at FROM tips WHERE created_at <= ?1 ORDER BY created_at DESC{}", pager.sql_limit()), [&pager.snapshot])?;
+    let rows = query_all(
+        ctx.conn,
+        &format!(
+            "SELECT id, url, title, note, submitted_by, state, opportunity_id, created_at FROM tips WHERE created_at <= ?1 ORDER BY created_at DESC{}",
+            pager.sql_limit()
+        ),
+        [&pager.snapshot],
+    )?;
     Ok(pager.wrap(rows, None))
 }
 
 pub fn ops() -> Vec<OpSpec> {
     vec![
-        op!("opportunities.list", "opportunities.read", Read, "Search and filter the catalog (typed filters or `filter` string)", OpportunityQuery, op_list, mcp = "discover_opportunities"),
-        op!("discover.search", "discover.read", Read, "Search the catalog (alias of opportunities.list)", OpportunityQuery, op_list),
-        op!("discover.new", "discover.read", Read, "Opportunities first seen in the last N days", OpportunityQuery, op_new),
-        op!("discover.trending", "discover.read", Read, "Verified opportunities by recent official activity (deterministic)", OpportunityQuery, op_trending),
-        op!("discover.compare", "opportunities.read", Read, "Side-by-side comparison of opportunities", CompareParams, op_compare, mcp = "compare_opportunities"),
-        op!("discover.history", "discover.read", Read, "Recent official changes across the catalog", PageParams, op_history),
-        op!("discover.watch", "discover.read", Read, "Event cursor and topics for live catalog changes", super::Empty, op_watch),
-        op!("opportunities.show", "opportunities.read", Read, "Full opportunity with optional rules, provenance and changes", ShowParams, op_show, resource = "id", mcp = "get_opportunity"),
-        op!("opportunities.rules", "opportunities.read", Read, "Structured eligibility rules with source citations", IdParam, op_rules, mcp = "get_opportunity_rules"),
-        op!("opportunities.set_rules", "opportunities.write", Elevated, "Curate structured rules from quoted official text", SetRulesParams, op_set_rules),
-        op!("opportunities.sources", "opportunities.read", Read, "Evidence links and snapshots behind a record", IdParam, op_sources),
-        op!("opportunities.changes", "opportunities.read", Read, "Field-level change history", IdParam, op_changes),
-        op!("opportunities.verify", "opportunities.write", Elevated, "Owner review: mark verified, disputed or pending", VerifyParams, op_verify),
-        op!("opportunities.bookmark", "opportunities.write", Write, "Bookmark (schedules deadline reminders)", MarkParams, op_bookmark),
-        op!("opportunities.hide", "opportunities.write", Write, "Hide from default listings", MarkParams, op_hide),
-        op!("opportunities.report", "opportunities.write", Write, "Report an inaccurate record", ReportParams, op_report),
-        op!("opportunities.export", "opportunities.read", Read, "Export search results as json, csv or markdown", ExportParams, op_export),
-        op!("tips.submit", "opportunities.write", Write, "Submit a settlement tip URL (quarantined lead)", TipParams, op_tip_submit),
-        op!("tips.list", "opportunities.read", Read, "List quarantined and corroborated tips", PageParams, op_tip_list),
+        op!(
+            "opportunities.list",
+            "opportunities.read",
+            Read,
+            "Search and filter the catalog (typed filters or `filter` string)",
+            OpportunityQuery,
+            op_list,
+            mcp = "discover_opportunities"
+        ),
+        op!(
+            "discover.search",
+            "discover.read",
+            Read,
+            "Search the catalog (alias of opportunities.list)",
+            OpportunityQuery,
+            op_list
+        ),
+        op!(
+            "discover.new",
+            "discover.read",
+            Read,
+            "Opportunities first seen in the last N days",
+            OpportunityQuery,
+            op_new
+        ),
+        op!(
+            "discover.trending",
+            "discover.read",
+            Read,
+            "Verified opportunities by recent official activity (deterministic)",
+            OpportunityQuery,
+            op_trending
+        ),
+        op!(
+            "discover.compare",
+            "opportunities.read",
+            Read,
+            "Side-by-side comparison of opportunities",
+            CompareParams,
+            op_compare,
+            mcp = "compare_opportunities"
+        ),
+        op!(
+            "discover.history",
+            "discover.read",
+            Read,
+            "Recent official changes across the catalog",
+            PageParams,
+            op_history
+        ),
+        op!(
+            "discover.watch",
+            "discover.read",
+            Read,
+            "Event cursor and topics for live catalog changes",
+            super::Empty,
+            op_watch
+        ),
+        op!(
+            "opportunities.show",
+            "opportunities.read",
+            Read,
+            "Full opportunity with optional rules, provenance and changes",
+            ShowParams,
+            op_show,
+            resource = "id",
+            mcp = "get_opportunity"
+        ),
+        op!(
+            "opportunities.rules",
+            "opportunities.read",
+            Read,
+            "Structured eligibility rules with source citations",
+            IdParam,
+            op_rules,
+            mcp = "get_opportunity_rules"
+        ),
+        op!(
+            "opportunities.set_rules",
+            "opportunities.write",
+            Elevated,
+            "Curate structured rules from quoted official text",
+            SetRulesParams,
+            op_set_rules
+        ),
+        op!(
+            "opportunities.sources",
+            "opportunities.read",
+            Read,
+            "Evidence links and snapshots behind a record",
+            IdParam,
+            op_sources
+        ),
+        op!(
+            "opportunities.changes",
+            "opportunities.read",
+            Read,
+            "Field-level change history",
+            IdParam,
+            op_changes
+        ),
+        op!(
+            "opportunities.verify",
+            "opportunities.write",
+            Elevated,
+            "Owner review: mark verified, disputed or pending",
+            VerifyParams,
+            op_verify
+        ),
+        op!(
+            "opportunities.bookmark",
+            "opportunities.write",
+            Write,
+            "Bookmark (schedules deadline reminders)",
+            MarkParams,
+            op_bookmark
+        ),
+        op!(
+            "opportunities.hide",
+            "opportunities.write",
+            Write,
+            "Hide from default listings",
+            MarkParams,
+            op_hide
+        ),
+        op!(
+            "opportunities.report",
+            "opportunities.write",
+            Write,
+            "Report an inaccurate record",
+            ReportParams,
+            op_report
+        ),
+        op!(
+            "opportunities.export",
+            "opportunities.read",
+            Read,
+            "Export search results as json, csv or markdown",
+            ExportParams,
+            op_export
+        ),
+        op!(
+            "tips.submit",
+            "opportunities.write",
+            Write,
+            "Submit a settlement tip URL (quarantined lead)",
+            TipParams,
+            op_tip_submit
+        ),
+        op!(
+            "tips.list",
+            "opportunities.read",
+            Read,
+            "List quarantined and corroborated tips",
+            PageParams,
+            op_tip_list
+        ),
     ]
 }

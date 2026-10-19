@@ -55,10 +55,10 @@ pub fn check_url(raw: &str, allowlist: &[String]) -> Result<Url, UrlRejection> {
             }
         }
     }
-    if let Some(p) = url.port() {
-        if p != 443 {
-            return Err(UrlRejection::Port(p));
-        }
+    if let Some(p) = url.port()
+        && p != 443
+    {
+        return Err(UrlRejection::Port(p));
     }
     Ok(url)
 }
@@ -95,12 +95,7 @@ pub fn is_forbidden_ip(ip: IpAddr) -> bool {
 /// Links shown to users for manual follow-up: https/http only, no credentials, no IP literals.
 pub fn is_safe_display_link(raw: &str) -> bool {
     match Url::parse(raw) {
-        Ok(u) => {
-            matches!(u.scheme(), "https" | "http")
-                && u.username().is_empty()
-                && u.password().is_none()
-                && matches!(u.host(), Some(Host::Domain(_)))
-        }
+        Ok(u) => matches!(u.scheme(), "https" | "http") && u.username().is_empty() && u.password().is_none() && matches!(u.host(), Some(Host::Domain(_))),
         Err(_) => false,
     }
 }
@@ -120,8 +115,14 @@ mod tests {
         assert_eq!(check_url("https://127.0.0.1/", &allow()), Err(UrlRejection::IpLiteral));
         assert_eq!(check_url("https://[::1]/", &allow()), Err(UrlRejection::IpLiteral));
         assert_eq!(check_url("https://user:pw@www.ftc.gov/", &allow()), Err(UrlRejection::Credentials));
-        assert_eq!(check_url("https://ftc.gov.evil.example/", &allow()), Err(UrlRejection::HostNotAllowed("ftc.gov.evil.example".into())));
-        assert_eq!(check_url("https://evilftc.gov/", &allow()), Err(UrlRejection::HostNotAllowed("evilftc.gov".into())));
+        assert_eq!(
+            check_url("https://ftc.gov.evil.example/", &allow()),
+            Err(UrlRejection::HostNotAllowed("ftc.gov.evil.example".into()))
+        );
+        assert_eq!(
+            check_url("https://evilftc.gov/", &allow()),
+            Err(UrlRejection::HostNotAllowed("evilftc.gov".into()))
+        );
         assert_eq!(check_url("https://www.ftc.gov:8443/", &allow()), Err(UrlRejection::Port(8443)));
         assert!(check_url("file:///etc/passwd", &allow()).is_err());
         assert!(check_url("javascript:alert(1)", &allow()).is_err());
@@ -129,7 +130,16 @@ mod tests {
 
     #[test]
     fn forbidden_ips() {
-        for ip in ["10.0.0.1", "192.168.1.1", "127.0.0.1", "169.254.169.254", "100.64.0.1", "::1", "fd00::1", "::ffff:10.0.0.1"] {
+        for ip in [
+            "10.0.0.1",
+            "192.168.1.1",
+            "127.0.0.1",
+            "169.254.169.254",
+            "100.64.0.1",
+            "::1",
+            "fd00::1",
+            "::ffff:10.0.0.1",
+        ] {
             assert!(is_forbidden_ip(ip.parse().unwrap()), "{ip}");
         }
         assert!(!is_forbidden_ip("23.0.0.1".parse().unwrap()));

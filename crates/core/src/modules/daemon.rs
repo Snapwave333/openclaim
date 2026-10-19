@@ -34,15 +34,28 @@ fn op_status(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
 }
 
 fn op_health(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
-    let sources = query_all(ctx.conn, "SELECT id, name, health, enabled, last_ok_at, last_failure, consecutive_failures FROM sources ORDER BY id", [])?;
+    let sources = query_all(
+        ctx.conn,
+        "SELECT id, name, health, enabled, last_ok_at, last_failure, consecutive_failures FROM sources ORDER BY id",
+        [],
+    )?;
     let jobs = query_all(ctx.conn, "SELECT state, count(*) AS n FROM jobs GROUP BY state", [])?;
     let problems: Vec<String> = sources
         .iter()
         .filter(|s| s["enabled"] == true && matches!(s["health"].as_str(), Some("blocked") | Some("degraded") | Some("needs_configuration")))
-        .map(|s| format!("source {} is {}: {}", s["id"].as_str().unwrap_or(""), s["health"].as_str().unwrap_or(""), s["last_failure"].as_str().unwrap_or("")))
+        .map(|s| {
+            format!(
+                "source {} is {}: {}",
+                s["id"].as_str().unwrap_or(""),
+                s["health"].as_str().unwrap_or(""),
+                s["last_failure"].as_str().unwrap_or("")
+            )
+        })
         .collect();
     let ok = problems.is_empty();
-    Ok(json!({"ok": ok, "sources": sources, "jobs": jobs, "problems": problems, "note": "A blocked or stale source means results may be incomplete; it never means there are no settlements."}))
+    Ok(
+        json!({"ok": ok, "sources": sources, "jobs": jobs, "problems": problems, "note": "A blocked or stale source means results may be incomplete; it never means there are no settlements."}),
+    )
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -58,7 +71,10 @@ fn op_doctor(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
     checks.push(json!({"check": "owner passphrase set", "ok": owner, "detail": if owner { "set" } else { "run `openclaim init` so approvals and personal data need a human" }}));
     let contact = crate::modules::config::get_str(ctx.conn, "network.contact").is_some();
     checks.push(json!({"check": "network.contact configured (needed for SEC.gov)", "ok": contact, "detail": if contact { "set" } else { "openclaim config set network.contact \"Your Name you@example.com\"" }}));
-    let tesseract = openclaim_extract::find_tesseract(&openclaim_extract::OcrConfig { tesseract: None, enabled: true });
+    let tesseract = openclaim_extract::find_tesseract(&openclaim_extract::OcrConfig {
+        tesseract: None,
+        enabled: true,
+    });
     checks.push(json!({"check": "tesseract OCR available (optional)", "ok": tesseract.is_some(), "detail": tesseract.map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "not installed; image OCR unavailable".into())}));
     let integrity = ctx.svc.inner.db.try_lock().is_err();
     checks.push(json!({"check": "database reachable", "ok": true, "detail": if integrity { "in use" } else { "idle" }}));
@@ -69,7 +85,11 @@ fn op_doctor(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
 fn op_logs(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: super::PageParams = parse_params(p)?;
     let limit = p.limit.unwrap_or(100).clamp(1, 1000);
-    let rows = query_all(ctx.conn, "SELECT id, actor_id, command, result, dry_run, duration_ms, created_at FROM command_runs ORDER BY created_at DESC LIMIT ?1", [limit])?;
+    let rows = query_all(
+        ctx.conn,
+        "SELECT id, actor_id, command, result, dry_run, duration_ms, created_at FROM command_runs ORDER BY created_at DESC LIMIT ?1",
+        [limit],
+    )?;
     Ok(json!({"items": rows, "log_dir": ctx.svc.inner.paths.log_dir.to_string_lossy()}))
 }
 
@@ -109,11 +129,48 @@ pub struct EventsParams {
 
 pub fn ops() -> Vec<OpSpec> {
     vec![
-        op!("daemon.status", "daemon.read", Read, "Daemon version, uptime, data location and record counts", Empty, op_status, mcp = "get_daemon_status"),
-        op!("daemon.health", "daemon.read", Read, "Source health, job states and explicit problems", Empty, op_health, mcp = "get_source_health"),
-        op!("daemon.doctor", "daemon.read", Read, "Environment checks (storage, passphrase, contact, OCR)", DoctorParams, op_doctor),
+        op!(
+            "daemon.status",
+            "daemon.read",
+            Read,
+            "Daemon version, uptime, data location and record counts",
+            Empty,
+            op_status,
+            mcp = "get_daemon_status"
+        ),
+        op!(
+            "daemon.health",
+            "daemon.read",
+            Read,
+            "Source health, job states and explicit problems",
+            Empty,
+            op_health,
+            mcp = "get_source_health"
+        ),
+        op!(
+            "daemon.doctor",
+            "daemon.read",
+            Read,
+            "Environment checks (storage, passphrase, contact, OCR)",
+            DoctorParams,
+            op_doctor
+        ),
         op!("daemon.logs", "daemon.read", Read, "Recent command runs", super::PageParams, op_logs),
-        op!("daemon.stop", "daemon.manage", OwnerOnly, "Stop the daemon; durable jobs resume on restart", Empty, op_stop),
-        op!("events.poll", "jobs.read", Read, "Read committed events after a sequence number", EventsParams, op_events),
+        op!(
+            "daemon.stop",
+            "daemon.manage",
+            OwnerOnly,
+            "Stop the daemon; durable jobs resume on restart",
+            Empty,
+            op_stop
+        ),
+        op!(
+            "events.poll",
+            "jobs.read",
+            Read,
+            "Read committed events after a sequence number",
+            EventsParams,
+            op_events
+        ),
     ]
 }

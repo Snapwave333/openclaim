@@ -39,10 +39,10 @@ pub fn print_envelope(env: &Envelope, out: Output) -> i32 {
                 let mut stdout = std::io::stdout().lock();
                 let _ = write!(stdout, "{}", render(d, out == Output::Table));
             }
-            if let Some(p) = &env.pagination {
-                if let Some(c) = &p.next_cursor {
-                    eprintln!("more results: --cursor {c}");
-                }
+            if let Some(p) = &env.pagination
+                && let Some(c) = &p.next_cursor
+            {
+                eprintln!("more results: --cursor {c}");
             }
             if env.dry_run {
                 eprintln!("(dry run)");
@@ -56,11 +56,21 @@ fn cell(v: &Value) -> String {
     let s = match v {
         Value::Null => String::new(),
         Value::String(s) => s.clone(),
-        Value::Bool(b) => if *b { "yes".into() } else { "no".into() },
+        Value::Bool(b) => {
+            if *b {
+                "yes".into()
+            } else {
+                "no".into()
+            }
+        }
         other => other.to_string(),
     };
     let s = s.replace('\n', " ");
-    if s.chars().count() > 48 { format!("{}…", s.chars().take(47).collect::<String>()) } else { s }
+    if s.chars().count() > 48 {
+        format!("{}…", s.chars().take(47).collect::<String>())
+    } else {
+        s
+    }
 }
 
 /// Renders `{items: [...]}` as a column table, other objects as `key: value` lines.
@@ -111,7 +121,25 @@ fn render_items(items: &[Value], table: bool) -> String {
     if !table {
         return items.iter().map(|i| format!("{}\n", serde_json::to_string(i).unwrap_or_default())).collect();
     }
-    const PREFERRED: &[&str] = &["id", "title", "name", "display_name", "status", "state", "verification_state", "assessment", "kind", "jurisdiction", "claim_deadline", "due_at", "health", "op", "decision", "updated_at", "created_at"];
+    const PREFERRED: &[&str] = &[
+        "id",
+        "title",
+        "name",
+        "display_name",
+        "status",
+        "state",
+        "verification_state",
+        "assessment",
+        "kind",
+        "jurisdiction",
+        "claim_deadline",
+        "due_at",
+        "health",
+        "op",
+        "decision",
+        "updated_at",
+        "created_at",
+    ];
     let first = items[0].as_object().cloned().unwrap_or_default();
     let mut cols: Vec<String> = PREFERRED.iter().filter(|c| first.contains_key(**c)).map(|c| c.to_string()).collect();
     for (k, v) in &first {
@@ -123,14 +151,31 @@ fn render_items(items: &[Value], table: bool) -> String {
         }
     }
     let rows: Vec<Vec<String>> = items.iter().map(|it| cols.iter().map(|c| cell(&it[c])).collect()).collect();
-    let widths: Vec<usize> = cols.iter().enumerate().map(|(i, c)| rows.iter().map(|r| r[i].chars().count()).max().unwrap_or(0).max(c.len())).collect();
+    let widths: Vec<usize> = cols
+        .iter()
+        .enumerate()
+        .map(|(i, c)| rows.iter().map(|r| r[i].chars().count()).max().unwrap_or(0).max(c.len()))
+        .collect();
     let mut out = String::new();
-    out.push_str(&cols.iter().enumerate().map(|(i, c)| format!("{:width$}", c, width = widths[i])).collect::<Vec<_>>().join("  "));
+    out.push_str(
+        &cols
+            .iter()
+            .enumerate()
+            .map(|(i, c)| format!("{:width$}", c, width = widths[i]))
+            .collect::<Vec<_>>()
+            .join("  "),
+    );
     out.push('\n');
     out.push_str(&widths.iter().map(|w| "-".repeat(*w)).collect::<Vec<_>>().join("  "));
     out.push('\n');
     for r in rows {
-        out.push_str(&r.iter().enumerate().map(|(i, c)| format!("{:width$}", c, width = widths[i])).collect::<Vec<_>>().join("  "));
+        out.push_str(
+            &r.iter()
+                .enumerate()
+                .map(|(i, c)| format!("{:width$}", c, width = widths[i]))
+                .collect::<Vec<_>>()
+                .join("  "),
+        );
         out.push('\n');
     }
     out

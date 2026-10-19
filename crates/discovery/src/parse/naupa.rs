@@ -6,30 +6,90 @@ use scraper::{Html, Selector};
 pub const INDEX_URL: &str = "https://unclaimed.org/search/";
 
 pub const US_STATES: &[(&str, &str)] = &[
-    ("AL", "Alabama"), ("AK", "Alaska"), ("AZ", "Arizona"), ("AR", "Arkansas"), ("CA", "California"), ("CO", "Colorado"),
-    ("CT", "Connecticut"), ("DE", "Delaware"), ("DC", "District of Columbia"), ("FL", "Florida"), ("GA", "Georgia"),
-    ("HI", "Hawaii"), ("ID", "Idaho"), ("IL", "Illinois"), ("IN", "Indiana"), ("IA", "Iowa"), ("KS", "Kansas"),
-    ("KY", "Kentucky"), ("LA", "Louisiana"), ("ME", "Maine"), ("MD", "Maryland"), ("MA", "Massachusetts"),
-    ("MI", "Michigan"), ("MN", "Minnesota"), ("MS", "Mississippi"), ("MO", "Missouri"), ("MT", "Montana"),
-    ("NE", "Nebraska"), ("NV", "Nevada"), ("NH", "New Hampshire"), ("NJ", "New Jersey"), ("NM", "New Mexico"),
-    ("NY", "New York"), ("NC", "North Carolina"), ("ND", "North Dakota"), ("OH", "Ohio"), ("OK", "Oklahoma"),
-    ("OR", "Oregon"), ("PA", "Pennsylvania"), ("RI", "Rhode Island"), ("SC", "South Carolina"), ("SD", "South Dakota"),
-    ("TN", "Tennessee"), ("TX", "Texas"), ("UT", "Utah"), ("VT", "Vermont"), ("VA", "Virginia"), ("WA", "Washington"),
-    ("WV", "West Virginia"), ("WI", "Wisconsin"), ("WY", "Wyoming"),
+    ("AL", "Alabama"),
+    ("AK", "Alaska"),
+    ("AZ", "Arizona"),
+    ("AR", "Arkansas"),
+    ("CA", "California"),
+    ("CO", "Colorado"),
+    ("CT", "Connecticut"),
+    ("DE", "Delaware"),
+    ("DC", "District of Columbia"),
+    ("FL", "Florida"),
+    ("GA", "Georgia"),
+    ("HI", "Hawaii"),
+    ("ID", "Idaho"),
+    ("IL", "Illinois"),
+    ("IN", "Indiana"),
+    ("IA", "Iowa"),
+    ("KS", "Kansas"),
+    ("KY", "Kentucky"),
+    ("LA", "Louisiana"),
+    ("ME", "Maine"),
+    ("MD", "Maryland"),
+    ("MA", "Massachusetts"),
+    ("MI", "Michigan"),
+    ("MN", "Minnesota"),
+    ("MS", "Mississippi"),
+    ("MO", "Missouri"),
+    ("MT", "Montana"),
+    ("NE", "Nebraska"),
+    ("NV", "Nevada"),
+    ("NH", "New Hampshire"),
+    ("NJ", "New Jersey"),
+    ("NM", "New Mexico"),
+    ("NY", "New York"),
+    ("NC", "North Carolina"),
+    ("ND", "North Dakota"),
+    ("OH", "Ohio"),
+    ("OK", "Oklahoma"),
+    ("OR", "Oregon"),
+    ("PA", "Pennsylvania"),
+    ("RI", "Rhode Island"),
+    ("SC", "South Carolina"),
+    ("SD", "South Dakota"),
+    ("TN", "Tennessee"),
+    ("TX", "Texas"),
+    ("UT", "Utah"),
+    ("VT", "Vermont"),
+    ("VA", "Virginia"),
+    ("WA", "Washington"),
+    ("WV", "West Virginia"),
+    ("WI", "Wisconsin"),
+    ("WY", "Wyoming"),
 ];
 
 pub const US_TERRITORIES: &[(&str, &str)] = &[("PR", "Puerto Rico"), ("GU", "Guam"), ("VI", "U.S. Virgin Islands"), ("AS", "American Samoa")];
 
 pub const CANADA: &[(&str, &str)] = &[
-    ("CA-AB", "Alberta"), ("CA-BC", "British Columbia"), ("CA-QC", "Quebec"), ("CA-NB", "New Brunswick"), ("CA-BOC", "Bank of Canada"),
+    ("CA-AB", "Alberta"),
+    ("CA-BC", "British Columbia"),
+    ("CA-QC", "Quebec"),
+    ("CA-NB", "New Brunswick"),
+    ("CA-BOC", "Bank of Canada"),
 ];
 
 /// Federal and multi-state entries are not scraped: they are policy-reviewed constants.
 pub fn fixed_programs() -> Vec<ParsedProgram> {
     vec![
-        ParsedProgram { jurisdiction: "US-MISSINGMONEY".into(), name: "MissingMoney.com (NAUPA-endorsed multi-state search)".into(), official_url: "https://www.missingmoney.com/".into(), kind: "multi_state".into() },
-        ParsedProgram { jurisdiction: "US-NAUPA".into(), name: "NAUPA state-by-state directory".into(), official_url: "https://unclaimed.org/search/".into(), kind: "multi_state".into() },
-        ParsedProgram { jurisdiction: "US-USAGOV".into(), name: "USAGov: unclaimed money from the government".into(), official_url: "https://www.usa.gov/unclaimed-money".into(), kind: "federal".into() },
+        ParsedProgram {
+            jurisdiction: "US-MISSINGMONEY".into(),
+            name: "MissingMoney.com (NAUPA-endorsed multi-state search)".into(),
+            official_url: "https://www.missingmoney.com/".into(),
+            kind: "multi_state".into(),
+        },
+        ParsedProgram {
+            jurisdiction: "US-NAUPA".into(),
+            name: "NAUPA state-by-state directory".into(),
+            official_url: "https://unclaimed.org/search/".into(),
+            kind: "multi_state".into(),
+        },
+        ParsedProgram {
+            jurisdiction: "US-USAGOV".into(),
+            name: "USAGov: unclaimed money from the government".into(),
+            official_url: "https://www.usa.gov/unclaimed-money".into(),
+            kind: "federal".into(),
+        },
     ]
 }
 
@@ -38,7 +98,10 @@ fn code_for(name: &str) -> Option<(String, &'static str)> {
     if let Some((c, _)) = US_STATES.iter().find(|(_, s)| s.eq_ignore_ascii_case(n)) {
         return Some(((*c).to_string(), "us_state"));
     }
-    if let Some((c, _)) = US_TERRITORIES.iter().find(|(code, s)| s.eq_ignore_ascii_case(n) || (n.eq_ignore_ascii_case("Virgin Islands") && *code == "VI")) {
+    if let Some((c, _)) = US_TERRITORIES
+        .iter()
+        .find(|(code, s)| s.eq_ignore_ascii_case(n) || (n.eq_ignore_ascii_case("Virgin Islands") && *code == "VI"))
+    {
         return Some(((*c).to_string(), "us_territory"));
     }
     if let Some((c, _)) = CANADA.iter().find(|(_, s)| s.eq_ignore_ascii_case(n)) {
@@ -63,7 +126,12 @@ pub fn parse_directory(html: &str, base_url: &str) -> Vec<ParsedProgram> {
         if !openclaim_security::netpolicy::is_safe_display_link(&url) {
             continue;
         }
-        out.push(ParsedProgram { jurisdiction: code, name, official_url: url, kind: kind.into() });
+        out.push(ParsedProgram {
+            jurisdiction: code,
+            name,
+            official_url: url,
+            kind: kind.into(),
+        });
     }
     out
 }

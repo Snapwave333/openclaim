@@ -25,7 +25,11 @@ pub fn append(conn: &Connection, actor: &str, action: &str, subject: &str, detai
 
 /// Recomputes the chain; returns the first broken sequence number, if any.
 pub fn verify(conn: &Connection) -> OcResult<(u64, Option<i64>)> {
-    let rows = query_all(conn, "SELECT seq, id, actor, action, timestamp, redacted_subject, details_json, prev_hash, integrity_hash FROM audit_log ORDER BY seq", [])?;
+    let rows = query_all(
+        conn,
+        "SELECT seq, id, actor, action, timestamp, redacted_subject, details_json, prev_hash, integrity_hash FROM audit_log ORDER BY seq",
+        [],
+    )?;
     let mut prev = "genesis".to_string();
     let mut count = 0u64;
     for r in rows {

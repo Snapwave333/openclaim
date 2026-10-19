@@ -10,8 +10,23 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 pub fn error_codes() -> Value {
-    let all = [ErrorCode::InvalidArgument, ErrorCode::NotFound, ErrorCode::PermissionDenied, ErrorCode::ApprovalRequired, ErrorCode::Conflict, ErrorCode::Unavailable, ErrorCode::Timeout, ErrorCode::PolicyBlocked, ErrorCode::PartialResult, ErrorCode::Internal];
-    json!(all.iter().map(|c| json!({"code": c.as_str(), "exit_code": c.exit_code(), "http_status": c.http_status(), "retryable_by_default": c.default_retryable()})).collect::<Vec<_>>())
+    let all = [
+        ErrorCode::InvalidArgument,
+        ErrorCode::NotFound,
+        ErrorCode::PermissionDenied,
+        ErrorCode::ApprovalRequired,
+        ErrorCode::Conflict,
+        ErrorCode::Unavailable,
+        ErrorCode::Timeout,
+        ErrorCode::PolicyBlocked,
+        ErrorCode::PartialResult,
+        ErrorCode::Internal,
+    ];
+    json!(
+        all.iter()
+            .map(|c| json!({"code": c.as_str(), "exit_code": c.exit_code(), "http_status": c.http_status(), "retryable_by_default": c.default_retryable()}))
+            .collect::<Vec<_>>()
+    )
 }
 
 pub fn full_export() -> Value {
@@ -36,7 +51,9 @@ fn op_export(_ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
 }
 
 fn op_commands(_ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
-    Ok(json!({"commands": ops::registry().iter().map(|o| json!({"name": o.name, "scope": o.scope, "effect": o.effect, "summary": o.summary, "mcp_tool": o.mcp_tool})).collect::<Vec<_>>()}))
+    Ok(
+        json!({"commands": ops::registry().iter().map(|o| json!({"name": o.name, "scope": o.scope, "effect": o.effect, "summary": o.summary, "mcp_tool": o.mcp_tool})).collect::<Vec<_>>()}),
+    )
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -73,10 +90,10 @@ pub fn validate_params(spec: &OpSpec, params: &Value) -> Vec<String> {
     };
     if let Some(req) = schema["required"].as_array() {
         for r in req {
-            if let Some(k) = r.as_str() {
-                if !obj.contains_key(k) {
-                    problems.push(format!("missing required parameter '{k}'"));
-                }
+            if let Some(k) = r.as_str()
+                && !obj.contains_key(k)
+            {
+                problems.push(format!("missing required parameter '{k}'"));
             }
         }
     }
@@ -87,7 +104,9 @@ pub fn validate_params(spec: &OpSpec, params: &Value) -> Vec<String> {
                 None if !additional => problems.push(format!("unknown parameter '{k}'")),
                 None => {}
                 Some(p) => {
-                    let ty = p["type"].as_str().or_else(|| p["type"].as_array().and_then(|a| a.first()).and_then(|t| t.as_str()));
+                    let ty = p["type"]
+                        .as_str()
+                        .or_else(|| p["type"].as_array().and_then(|a| a.first()).and_then(|t| t.as_str()));
                     let ok = match ty {
                         Some("string") => v.is_string() || v.is_null(),
                         Some("boolean") => v.is_boolean() || v.is_null(),
@@ -115,10 +134,31 @@ fn op_validate(_ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
 
 pub fn ops() -> Vec<OpSpec> {
     vec![
-        op!("schema.export", "schema.read", Read, "Full machine-readable contract: envelope, errors, scopes, operations", super::Empty, op_export),
-        op!("schema.commands", "schema.read", Read, "Operation names, scopes, effects and summaries", super::Empty, op_commands),
+        op!(
+            "schema.export",
+            "schema.read",
+            Read,
+            "Full machine-readable contract: envelope, errors, scopes, operations",
+            super::Empty,
+            op_export
+        ),
+        op!(
+            "schema.commands",
+            "schema.read",
+            Read,
+            "Operation names, scopes, effects and summaries",
+            super::Empty,
+            op_commands
+        ),
         op!("schema.describe", "schema.read", Read, "One operation's parameter schema", OpParam, op_describe),
         op!("schema.version", "schema.read", Read, "Product and contract versions", super::Empty, op_version),
-        op!("schema.validate", "schema.read", Read, "Validate parameters against an operation's schema", ValidateParams, op_validate),
+        op!(
+            "schema.validate",
+            "schema.read",
+            Read,
+            "Validate parameters against an operation's schema",
+            ValidateParams,
+            op_validate
+        ),
     ]
 }

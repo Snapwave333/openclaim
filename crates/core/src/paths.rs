@@ -39,7 +39,13 @@ impl Paths {
     }
 
     pub fn ipc_name(&self) -> String {
-        let norm = self.data_dir.to_string_lossy().replace('/', "\\").trim_end_matches('\\').trim_start_matches("\\\\?\\").to_lowercase();
+        let norm = self
+            .data_dir
+            .to_string_lossy()
+            .replace('/', "\\")
+            .trim_end_matches('\\')
+            .trim_start_matches("\\\\?\\")
+            .to_lowercase();
         let digest = openclaim_security::digest::sha256_hex(norm.as_bytes());
         format!("openclaim-{}", &digest[..16])
     }
@@ -51,10 +57,16 @@ impl Paths {
 
 fn default_dir() -> PathBuf {
     if cfg!(windows) {
-        std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(".")).join("OpenClaim")
+        std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("OpenClaim")
     } else if let Some(xdg) = std::env::var_os("XDG_DATA_HOME") {
         PathBuf::from(xdg).join("openclaim")
     } else {
-        std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(".")).join(".local/share/openclaim")
+        std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".local/share/openclaim")
     }
 }

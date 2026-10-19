@@ -18,7 +18,10 @@ pub struct Endpoint {
 impl Endpoint {
     pub fn for_paths(paths: &openclaim_core::Paths) -> Endpoint {
         let name = paths.ipc_name();
-        Endpoint { socket_path: paths.data_dir.join(format!("{name}.sock")), name }
+        Endpoint {
+            socket_path: paths.data_dir.join(format!("{name}.sock")),
+            name,
+        }
     }
 
     #[cfg(windows)]
@@ -60,9 +63,9 @@ where
         let response = match serde_json::from_str::<Request>(trimmed) {
             Ok(req) => {
                 let svc = svc.clone();
-                tokio::task::spawn_blocking(move || svc.execute(req)).await.unwrap_or_else(|_| {
-                    Envelope::failure(String::new(), String::new(), OcError::internal("request task panicked"))
-                })
+                tokio::task::spawn_blocking(move || svc.execute(req))
+                    .await
+                    .unwrap_or_else(|_| Envelope::failure(String::new(), String::new(), OcError::internal("request task panicked")))
             }
             Err(e) => Envelope::failure(String::new(), String::new(), OcError::invalid(format!("malformed request: {e}"))),
         };
@@ -97,7 +100,11 @@ async fn serve_windows(svc: Service, endpoint: Endpoint, shutdown: impl std::fut
         let mut attrs = win::security_attributes(&sd);
         // SAFETY: `attrs` points at a valid SECURITY_ATTRIBUTES whose descriptor outlives the call.
         unsafe { opts.create_with_security_attributes_raw(&path, &mut attrs as *mut _ as *mut _) }.map_err(|e| {
-            if first { format!("another openclaimd already owns {path} ({e})") } else { e.to_string() }
+            if first {
+                format!("another openclaimd already owns {path} ({e})")
+            } else {
+                e.to_string()
+            }
         })
     };
     let mut server = make(true)?;
@@ -158,21 +165,28 @@ pub async fn call(endpoint: &Endpoint, req: &Request, timeout: std::time::Durati
                         attempts += 1;
                         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     }
-                    Err(e) => return Err(OcError::unavailable(format!("daemon not reachable at {path}: {e}")).with_next_action("run `openclaim daemon ensure`")),
+                    Err(e) => {
+                        return Err(OcError::unavailable(format!("daemon not reachable at {path}: {e}")).with_next_action("run `openclaim daemon ensure`"));
+                    }
                 }
             }
         };
         #[cfg(not(windows))]
-        let stream = tokio::net::UnixStream::connect(&endpoint.socket_path)
-            .await
-            .map_err(|e| OcError::unavailable(format!("daemon not reachable at {}: {e}", endpoint.socket_path.display())).with_next_action("run `openclaim daemon ensure`"))?;
+        let stream = tokio::net::UnixStream::connect(&endpoint.socket_path).await.map_err(|e| {
+            OcError::unavailable(format!("daemon not reachable at {}: {e}", endpoint.socket_path.display())).with_next_action("run `openclaim daemon ensure`")
+        })?;
         let (r, mut w) = tokio::io::split(stream);
         let mut line = serde_json::to_string(req).map_err(|e| OcError::internal(e.to_string()))?;
         line.push('\n');
-        w.write_all(line.as_bytes()).await.map_err(|e| OcError::unavailable(format!("write to daemon failed: {e}")))?;
+        w.write_all(line.as_bytes())
+            .await
+            .map_err(|e| OcError::unavailable(format!("write to daemon failed: {e}")))?;
         let mut reader = BufReader::new(r).take(MAX_REQUEST_BYTES as u64 * 4);
         let mut out = String::new();
-        reader.read_line(&mut out).await.map_err(|e| OcError::unavailable(format!("read from daemon failed: {e}")))?;
+        reader
+            .read_line(&mut out)
+            .await
+            .map_err(|e| OcError::unavailable(format!("read from daemon failed: {e}")))?;
         if out.trim().is_empty() {
             return Err(OcError::unavailable("daemon closed the connection without answering"));
         }
@@ -180,13 +194,24 @@ pub async fn call(endpoint: &Endpoint, req: &Request, timeout: std::time::Durati
     };
     match tokio::time::timeout(timeout, fut).await {
         Ok(r) => r,
-        Err(_) => Err(OcError::new(openclaim_domain::ErrorCode::Timeout, format!("no reply within {}s; a durable job may still continue", timeout.as_secs())).with_next_action("check `openclaim jobs list`")),
+        Err(_) => Err(OcError::new(
+            openclaim_domain::ErrorCode::Timeout,
+            format!("no reply within {}s; a durable job may still continue", timeout.as_secs()),
+        )
+        .with_next_action("check `openclaim jobs list`")),
     }
 }
 
 /// Is a daemon answering on this endpoint?
 pub async fn ping(endpoint: &Endpoint) -> bool {
-    call(endpoint, &Request::new("schema.version", serde_json::Value::Null), std::time::Duration::from_secs(3)).await.map(|e| e.ok).unwrap_or(false)
+    call(
+        endpoint,
+        &Request::new("schema.version", serde_json::Value::Null),
+        std::time::Duration::from_secs(3),
+    )
+    .await
+    .map(|e| e.ok)
+    .unwrap_or(false)
 }
 
 #[cfg(windows)]
@@ -222,6 +247,10 @@ mod win {
     }
 
     pub fn security_attributes(d: &Descriptor) -> SECURITY_ATTRIBUTES {
-        SECURITY_ATTRIBUTES { nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32, lpSecurityDescriptor: d.0, bInheritHandle: 0 }
+        SECURITY_ATTRIBUTES {
+            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: d.0,
+            bInheritHandle: 0,
+        }
     }
 }

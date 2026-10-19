@@ -131,14 +131,11 @@ pub struct TransitionEvidence {
 
 pub fn check_transition(from: ClaimStatus, to: ClaimStatus, ev: &TransitionEvidence) -> OcResult<()> {
     if !from.allowed_next().contains(&to) {
-        return Err(OcError::conflict(format!(
-            "claim cannot move from '{}' to '{}'",
-            from.as_str(),
-            to.as_str()
-        ))
-        .with_details(serde_json::json!({
-            "allowed": from.allowed_next().iter().map(|s| s.as_str()).collect::<Vec<_>>()
-        })));
+        return Err(
+            OcError::conflict(format!("claim cannot move from '{}' to '{}'", from.as_str(), to.as_str())).with_details(serde_json::json!({
+                "allowed": from.allowed_next().iter().map(|s| s.as_str()).collect::<Vec<_>>()
+            })),
+        );
     }
     if to.requires_user_confirmation() && !ev.user_confirmed {
         return Err(OcError::invalid(format!(
@@ -151,10 +148,7 @@ pub fn check_transition(from: ClaimStatus, to: ClaimStatus, ev: &TransitionEvide
             "'submitted' needs submission evidence: an official confirmation id or a linked receipt document",
         ));
     }
-    if matches!(to, ClaimStatus::Approved | ClaimStatus::Denied)
-        && ev.document_id.is_none()
-        && ev.note.as_deref().is_none_or(str::is_empty)
-    {
+    if matches!(to, ClaimStatus::Approved | ClaimStatus::Denied) && ev.document_id.is_none() && ev.note.as_deref().is_none_or(str::is_empty) {
         return Err(OcError::invalid(format!(
             "'{}' needs evidence: a linked notice document or a note describing the official notice",
             to.as_str()
@@ -178,7 +172,10 @@ mod tests {
     use super::*;
 
     fn confirmed() -> TransitionEvidence {
-        TransitionEvidence { user_confirmed: true, ..Default::default() }
+        TransitionEvidence {
+            user_confirmed: true,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -191,13 +188,20 @@ mod tests {
         let from = ClaimStatus::OpenedOfficialForm;
         assert!(check_transition(from, ClaimStatus::Submitted, &TransitionEvidence::default()).is_err());
         assert!(check_transition(from, ClaimStatus::Submitted, &confirmed()).is_err());
-        let ev = TransitionEvidence { confirmation_id: Some("ABC123".into()), ..confirmed() };
+        let ev = TransitionEvidence {
+            confirmation_id: Some("ABC123".into()),
+            ..confirmed()
+        };
         assert!(check_transition(from, ClaimStatus::Submitted, &ev).is_ok());
     }
 
     #[test]
     fn paid_requires_integer_amount() {
-        let ev = TransitionEvidence { amount_minor: Some(1250), currency: Some("USD".into()), ..confirmed() };
+        let ev = TransitionEvidence {
+            amount_minor: Some(1250),
+            currency: Some("USD".into()),
+            ..confirmed()
+        };
         assert!(check_transition(ClaimStatus::Approved, ClaimStatus::Paid, &ev).is_ok());
         assert!(check_transition(ClaimStatus::Approved, ClaimStatus::Paid, &confirmed()).is_err());
     }

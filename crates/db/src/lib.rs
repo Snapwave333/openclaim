@@ -10,12 +10,8 @@ const MIGRATIONS: &[(i64, &str)] = &[(1, include_str!("../../../migrations/0001_
 
 pub fn db_err(e: rusqlite::Error) -> OcError {
     match &e {
-        rusqlite::Error::SqliteFailure(f, _) if f.code == rusqlite::ErrorCode::ConstraintViolation => {
-            OcError::conflict(format!("constraint violated: {e}"))
-        }
-        rusqlite::Error::SqliteFailure(f, _)
-            if matches!(f.code, rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) =>
-        {
+        rusqlite::Error::SqliteFailure(f, _) if f.code == rusqlite::ErrorCode::ConstraintViolation => OcError::conflict(format!("constraint violated: {e}")),
+        rusqlite::Error::SqliteFailure(f, _) if matches!(f.code, rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => {
             OcError::conflict("database is busy; retry").with_next_action("retry the command")
         }
         _ => OcError::internal(format!("database error: {e}")),
@@ -48,7 +44,10 @@ impl Database {
         )
         .db()?;
         Self::configure(&conn)?;
-        let mut db = Database { conn, path: path.to_path_buf() };
+        let mut db = Database {
+            conn,
+            path: path.to_path_buf(),
+        };
         db.migrate()?;
         Ok(db)
     }
@@ -56,7 +55,10 @@ impl Database {
     pub fn open_in_memory() -> OcResult<Self> {
         let conn = Connection::open_in_memory().db()?;
         Self::configure(&conn)?;
-        let mut db = Database { conn, path: PathBuf::from(":memory:") };
+        let mut db = Database {
+            conn,
+            path: PathBuf::from(":memory:"),
+        };
         db.migrate()?;
         Ok(db)
     }
@@ -75,7 +77,9 @@ impl Database {
     pub fn schema_version(&self) -> OcResult<i64> {
         let exists: bool = self
             .conn
-            .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='meta'", [], |r| r.get::<_, i64>(0))
+            .query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='meta'", [], |r| {
+                r.get::<_, i64>(0)
+            })
             .db()?
             > 0;
         if !exists {
@@ -120,7 +124,9 @@ impl Database {
             }
         }
         let mut stmt = self.conn.prepare("PRAGMA foreign_key_check").db()?;
-        let rows = stmt.query_map([], |r| Ok(format!("foreign key violation in {}", r.get::<_, String>(0)?))).db()?;
+        let rows = stmt
+            .query_map([], |r| Ok(format!("foreign key violation in {}", r.get::<_, String>(0)?)))
+            .db()?;
         for r in rows {
             problems.push(r.db()?);
         }
@@ -132,9 +138,7 @@ impl Database {
         if dest.exists() {
             return Err(OcError::conflict(format!("{} already exists", dest.display())));
         }
-        self.conn
-            .execute("VACUUM INTO ?1", [dest.to_string_lossy().to_string()])
-            .db()?;
+        self.conn.execute("VACUUM INTO ?1", [dest.to_string_lossy().to_string()]).db()?;
         Ok(())
     }
 }
@@ -154,7 +158,12 @@ mod tests {
         db.conn
             .execute("INSERT INTO opportunities_fts(opportunity_id, title, administrator, summary, case_number) VALUES ('x','Walmart money transfers','Rust Consulting','refund checks','')", [])
             .unwrap();
-        let n: i64 = db.conn.query_row("SELECT count(*) FROM opportunities_fts WHERE opportunities_fts MATCH 'transfer'", [], |r| r.get(0)).unwrap();
+        let n: i64 = db
+            .conn
+            .query_row("SELECT count(*) FROM opportunities_fts WHERE opportunities_fts MATCH 'transfer'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
         assert_eq!(n, 1);
         assert!(db.integrity().unwrap().is_empty());
     }

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>OpenClaim Assistant</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1>OpenClaim Assistant</h1>
+    <p class="muted" id="site">—</p>
+  </header>
+
+  <section id="pair-section" hidden>
+    <h2>Pair with your local OpenClaim</h2>
+    <p>Run <code>openclaim agents register --name browser --kind extension --scope extension.prefill,sources.read --origin chrome-extension://&lt;this id&gt;</code> and paste the token.</p>
+    <label>Daemon URL <input id="base" value="http://127.0.0.1:7865"></label>
+    <label>Extension token <input id="token" type="text" autocomplete="off" spellcheck="false"></label>
+    <button id="pair">Pair</button>
+    <p class="muted">Your extension id: <code id="extid"></code></p>
+  </section>
+
+  <section id="main-section" hidden>
+    <div class="row">
+      <button id="grant" title="Allow this extension on the current site (one site at a time)">Allow on this site</button>
+      <button id="unpair" class="subtle">Unpair</button>
+    </div>
+
+    <h2>Prefill</h2>
+    <p class="muted">Only packages the owner prepared for this exact site appear here. Fields are previewed one by one; nothing is submitted.</p>
+    <select id="packages" aria-label="Prepared packages"></select>
+    <button id="preview">Preview fields</button>
+    <ul id="plan" class="plan" aria-live="polite"></ul>
+    <div class="row">
+      <button id="fill" disabled>Fill selected</button>
+      <button id="undo" class="subtle" disabled>Undo</button>
+    </div>
+    <p class="warn">Never filled: passwords, card or bank numbers, SSN, signatures, CAPTCHA. You click Submit.</p>
+
+    <h2>Capture official page</h2>
+    <p class="muted">For sources that block automated access (e.g. ftc.gov), save the page you are viewing into OpenClaim with its provenance.</p>
+    <select id="sources" aria-label="Source"></select>
+    <button id="capture">Capture this page</button>
+  </section>
+
+  <p id="status" role="status" aria-live="polite"></p>
+  <script src="popup.js"></script>
+</body>
+</html>

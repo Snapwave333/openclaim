@@ -26,7 +26,12 @@ pub struct DaemonInfo {
 impl Client {
     pub fn new(g: &Globals) -> Client {
         let paths = Paths::resolve(g.data_dir.clone());
-        Client { endpoint: Endpoint::for_paths(&paths), paths, timeout: Duration::from_secs(g.timeout_secs.max(1)), autostart: !g.no_autostart }
+        Client {
+            endpoint: Endpoint::for_paths(&paths),
+            paths,
+            timeout: Duration::from_secs(g.timeout_secs.max(1)),
+            autostart: !g.no_autostart,
+        }
     }
 
     pub fn daemon_info(&self) -> Option<DaemonInfo> {
@@ -42,14 +47,20 @@ impl Client {
             return Ok(s);
         }
         let on_path = std::env::var_os("PATH").and_then(|p| std::env::split_paths(&p).map(|d| d.join(name)).find(|c| c.is_file()));
-        on_path.ok_or_else(|| OcError::unavailable("openclaimd was not found next to openclaim or on PATH").with_next_action("install openclaimd or start it yourself"))
+        on_path.ok_or_else(|| {
+            OcError::unavailable("openclaimd was not found next to openclaim or on PATH").with_next_action("install openclaimd or start it yourself")
+        })
     }
 
     /// Spawns openclaimd detached from this terminal.
     pub fn spawn_daemon(&self) -> Result<u32, OcError> {
         let bin = Self::daemon_binary()?;
         let mut cmd = std::process::Command::new(bin);
-        cmd.arg("--data-dir").arg(&self.paths.data_dir).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+        cmd.arg("--data-dir")
+            .arg(&self.paths.data_dir)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -81,7 +92,8 @@ impl Client {
                 return Ok(true);
             }
         }
-        Err(OcError::unavailable("openclaimd did not answer within 15 seconds").with_next_action(format!("check {}", self.paths.log_dir.join("openclaimd.log").display())))
+        Err(OcError::unavailable("openclaimd did not answer within 15 seconds")
+            .with_next_action(format!("check {}", self.paths.log_dir.join("openclaimd.log").display())))
     }
 
     pub async fn call(&self, req: &Request) -> Envelope {

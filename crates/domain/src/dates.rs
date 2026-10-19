@@ -3,8 +3,7 @@ use time::macros::format_description;
 use time::{Date, OffsetDateTime};
 
 pub fn parse_date(s: &str) -> OcResult<Date> {
-    Date::parse(s, format_description!("[year]-[month]-[day]"))
-        .map_err(|_| OcError::invalid(format!("'{s}' is not a YYYY-MM-DD date")))
+    Date::parse(s, format_description!("[year]-[month]-[day]")).map_err(|_| OcError::invalid(format!("'{s}' is not a YYYY-MM-DD date")))
 }
 
 pub fn format_date(d: Date) -> String {
@@ -20,8 +19,7 @@ pub fn format_ts(t: OffsetDateTime) -> String {
 }
 
 pub fn parse_ts(s: &str) -> OcResult<OffsetDateTime> {
-    OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339)
-        .map_err(|_| OcError::invalid(format!("'{s}' is not an RFC 3339 timestamp")))
+    OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339).map_err(|_| OcError::invalid(format!("'{s}' is not an RFC 3339 timestamp")))
 }
 
 pub fn today_utc() -> Date {
@@ -57,8 +55,18 @@ impl Span {
 pub fn month_from_name(name: &str) -> Option<u8> {
     let n = name.trim().trim_end_matches('.').to_ascii_lowercase();
     let months = [
-        "january", "february", "march", "april", "may", "june", "july", "august", "september",
-        "october", "november", "december",
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
     ];
     months
         .iter()
@@ -72,9 +80,18 @@ mod tests {
 
     #[test]
     fn spans_overlap_inclusively() {
-        let a = Span { start: Some(parse_date("2020-01-01").unwrap()), end: Some(parse_date("2020-12-31").unwrap()) };
-        let b = Span { start: Some(parse_date("2020-12-31").unwrap()), end: None };
-        let c = Span { start: Some(parse_date("2021-01-01").unwrap()), end: None };
+        let a = Span {
+            start: Some(parse_date("2020-01-01").unwrap()),
+            end: Some(parse_date("2020-12-31").unwrap()),
+        };
+        let b = Span {
+            start: Some(parse_date("2020-12-31").unwrap()),
+            end: None,
+        };
+        let c = Span {
+            start: Some(parse_date("2021-01-01").unwrap()),
+            end: None,
+        };
         assert!(a.overlaps(&b));
         assert!(!a.overlaps(&c));
     }

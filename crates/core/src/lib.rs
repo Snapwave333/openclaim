@@ -60,7 +60,11 @@ impl Service {
         std::fs::create_dir_all(&paths.data_dir).map_err(|e| OcError::internal(format!("create {}: {e}", paths.data_dir.display())))?;
         std::fs::create_dir_all(&paths.vault_dir).map_err(|e| OcError::internal(format!("create vault dir: {e}")))?;
         let vault = VaultKey::load_or_create(&paths.data_dir).map_err(|e| OcError::internal(e.to_string()))?;
-        let db = if paths.in_memory { Database::open_in_memory()? } else { Database::open(&paths.db_path)? };
+        let db = if paths.in_memory {
+            Database::open_in_memory()?
+        } else {
+            Database::open(&paths.db_path)?
+        };
         let (events, _) = broadcast::channel(1024);
         let svc = Service {
             inner: Arc::new(Inner {

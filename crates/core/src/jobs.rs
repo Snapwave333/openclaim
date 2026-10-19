@@ -52,7 +52,11 @@ pub fn enqueue_conn(conn: &Connection, kind: &str, params: Value, actor_id: &str
 pub fn job_event(conn: &Connection, job_id: &str, event_type: &str, payload: Value, now: &str) -> OcResult<()> {
     let seq: i64 = scalar::<i64, _>(conn, "SELECT COALESCE(max(sequence),0) FROM job_events WHERE job_id = ?1", [job_id])?.unwrap_or(0) + 1;
     let payload = openclaim_security::redact::redact_json(&payload);
-    exec(conn, "INSERT INTO job_events(id, job_id, sequence, event_type, payload_redacted_json, at) VALUES (?1,?2,?3,?4,?5,?6)", (openclaim_db::new_id(), job_id, seq, event_type, payload.to_string(), now))?;
+    exec(
+        conn,
+        "INSERT INTO job_events(id, job_id, sequence, event_type, payload_redacted_json, at) VALUES (?1,?2,?3,?4,?5,?6)",
+        (openclaim_db::new_id(), job_id, seq, event_type, payload.to_string(), now),
+    )?;
     let mut ev = json!({"event": event_type, "job_id": job_id, "sequence": seq, "at": now});
     if let (Some(e), Some(p)) = (ev.as_object_mut(), payload.as_object()) {
         for (k, v) in p {
@@ -72,13 +76,21 @@ pub fn seed_schedules(conn: &Connection) -> OcResult<()> {
         ("sched-integrity", "integrity_check", 7 * 24 * 3600),
     ];
     for (id, kind, secs) in defaults {
-        exec(conn, "INSERT OR IGNORE INTO schedules(id, kind, params_json, interval_secs, next_run_at, enabled) VALUES (?1,?2,'{}',?3,?4,1)", (id, kind, secs, &now))?;
+        exec(
+            conn,
+            "INSERT OR IGNORE INTO schedules(id, kind, params_json, interval_secs, next_run_at, enabled) VALUES (?1,?2,'{}',?3,?4,1)",
+            (id, kind, secs, &now),
+        )?;
     }
     Ok(())
 }
 
 fn cancelled(conn: &Connection, job_id: &str) -> bool {
-    scalar::<i64, _>(conn, "SELECT cancel_requested FROM jobs WHERE id = ?1", [job_id]).ok().flatten().unwrap_or(0) != 0
+    scalar::<i64, _>(conn, "SELECT cancel_requested FROM jobs WHERE id = ?1", [job_id])
+        .ok()
+        .flatten()
+        .unwrap_or(0)
+        != 0
 }
 
 impl Service {
@@ -127,15 +139,28 @@ impl Service {
 
     fn tick_schedules(&self) -> OcResult<()> {
         self.with_tx(|conn, now| {
-            for s in query_all(conn, "SELECT id, kind, params_json, interval_secs FROM schedules WHERE enabled = 1 AND next_run_at <= ?1", [now])? {
+            for s in query_all(
+                conn,
+                "SELECT id, kind, params_json, interval_secs FROM schedules WHERE enabled = 1 AND next_run_at <= ?1",
+                [now],
+            )? {
                 let kind = s["kind"].as_str().unwrap_or("");
-                let next = openclaim_domain::dates::format_ts(time::OffsetDateTime::now_utc() + time::Duration::seconds(s["interval_secs"].as_i64().unwrap_or(3600)));
-                exec(conn, "UPDATE schedules SET next_run_at = ?2 WHERE id = ?1", (s["id"].as_str().unwrap_or(""), next))?;
+                let next =
+                    openclaim_domain::dates::format_ts(time::OffsetDateTime::now_utc() + time::Duration::seconds(s["interval_secs"].as_i64().unwrap_or(3600)));
+                exec(
+                    conn,
+                    "UPDATE schedules SET next_run_at = ?2 WHERE id = ?1",
+                    (s["id"].as_str().unwrap_or(""), next),
+                )?;
                 if kind == "source_refresh_all" {
                     if modules::config::get_bool(conn, "network.offline") {
                         continue;
                     }
-                    for src in query_all(conn, "SELECT id FROM sources WHERE enabled = 1 AND health != 'needs_configuration' AND (next_fetch_at IS NULL OR next_fetch_at <= ?1)", [now])? {
+                    for src in query_all(
+                        conn,
+                        "SELECT id FROM sources WHERE enabled = 1 AND health != 'needs_configuration' AND (next_fetch_at IS NULL OR next_fetch_at <= ?1)",
+                        [now],
+                    )? {
                         enqueue_conn(conn, "source_refresh", json!({"source_id": src["id"], "force": false}), "system", None, now)?;
                     }
                 } else {
@@ -166,7 +191,11 @@ impl Service {
     pub fn job_progress(&self, job_id: &str, percent: u32, note: &str) -> OcResult<()> {
         self.with_tx(|conn, now| {
             let lease = openclaim_domain::dates::format_ts(time::OffsetDateTime::now_utc() + time::Duration::seconds(LEASE_SECS));
-            exec(conn, "UPDATE jobs SET progress = ?2, lease_expires_at = ?3, updated_at = ?4 WHERE id = ?1", (job_id, percent as i64, lease, now))?;
+            exec(
+                conn,
+                "UPDATE jobs SET progress = ?2, lease_expires_at = ?3, updated_at = ?4 WHERE id = ?1",
+                (job_id, percent as i64, lease, now),
+            )?;
             job_event(conn, job_id, "job.progress", json!({"percent": percent, "note": note}), now)
         })
     }
@@ -208,7 +237,13 @@ impl Service {
             }
             running.retain(|h| !h.is_finished());
             let _ = self.tick_schedules();
-            let concurrency = self.inner.db.lock().ok().map(|g| modules::config::get_u64(&g.conn, "jobs.concurrency", 2)).unwrap_or(2) as usize;
+            let concurrency = self
+                .inner
+                .db
+                .lock()
+                .ok()
+                .map(|g| modules::config::get_u64(&g.conn, "jobs.concurrency", 2))
+                .unwrap_or(2) as usize;
             while running.len() < concurrency {
                 let worker = format!("{}-{}", self.inner.instance_id, running.len());
                 match self.claim_job(&worker) {
@@ -267,13 +302,28 @@ impl Service {
         let source_id = params["source_id"].as_str().unwrap_or("").to_string();
         let (manifest, etag, last_modified, contact, offline, due) = {
             let guard = self.inner.db.lock().map_err(|_| OcError::internal("db lock"))?;
-            let row = crate::sql::require(query_one(&guard.conn, "SELECT enabled, etag, last_modified, manifest_json FROM sources WHERE id = ?1", [&source_id])?, "source", &source_id)?;
+            let row = crate::sql::require(
+                query_one(
+                    &guard.conn,
+                    "SELECT enabled, etag, last_modified, manifest_json FROM sources WHERE id = ?1",
+                    [&source_id],
+                )?,
+                "source",
+                &source_id,
+            )?;
             if row["enabled"] != true {
                 return Err(OcError::policy("source is disabled"));
             }
             let m: openclaim_discovery::ConnectorManifest = serde_json::from_value(row["manifest"].clone())?;
             let due = modules::sources::detail_due(&guard.conn, &source_id, m.max_detail_pages as usize)?;
-            (m, row["etag"].as_str().map(str::to_string), row["last_modified"].as_str().map(str::to_string), modules::config::get_str(&guard.conn, "network.contact"), modules::config::get_bool(&guard.conn, "network.offline"), due)
+            (
+                m,
+                row["etag"].as_str().map(str::to_string),
+                row["last_modified"].as_str().map(str::to_string),
+                modules::config::get_str(&guard.conn, "network.contact"),
+                modules::config::get_bool(&guard.conn, "network.offline"),
+                due,
+            )
         };
         let force = params["force"].as_bool().unwrap_or(false);
         let input = openclaim_discovery::run::RunInput {
@@ -333,12 +383,19 @@ impl Service {
         let source_id = params["source_id"].as_str().unwrap_or("").to_string();
         let (manifest, contact, offline) = {
             let guard = self.inner.db.lock().map_err(|_| OcError::internal("db lock"))?;
-            (modules::sources::manifest_of(&guard.conn, &source_id)?, modules::config::get_str(&guard.conn, "network.contact"), modules::config::get_bool(&guard.conn, "network.offline"))
+            (
+                modules::sources::manifest_of(&guard.conn, &source_id)?,
+                modules::config::get_str(&guard.conn, "network.contact"),
+                modules::config::get_bool(&guard.conn, "network.offline"),
+            )
         };
-        let fetcher = openclaim_discovery::fetch::Fetcher::new(openclaim_discovery::run::fetch_policy(&manifest, offline, contact.as_deref())).map_err(OcError::internal)?;
+        let fetcher = openclaim_discovery::fetch::Fetcher::new(openclaim_discovery::run::fetch_policy(&manifest, offline, contact.as_deref()))
+            .map_err(OcError::internal)?;
         match fetcher.get(&manifest.url, None).await {
             Ok(f) => Ok(json!({"source_id": source_id, "ok": true, "http_status": f.status, "bytes": f.body.len(), "final_url": f.url})),
-            Err(e) => Ok(json!({"source_id": source_id, "ok": false, "failure_class": e.class.as_str(), "detail": e.message, "retry_after": e.retry_after_secs})),
+            Err(e) => {
+                Ok(json!({"source_id": source_id, "ok": false, "failure_class": e.class.as_str(), "detail": e.message, "retry_after": e.retry_after_secs}))
+            }
         }
     }
 
@@ -346,7 +403,10 @@ impl Service {
         self.with_tx(|conn, now| {
             let people: Vec<String> = match params["person_id"].as_str() {
                 Some(p) => vec![p.to_string()],
-                None => query_all(conn, "SELECT id FROM people", [])?.into_iter().filter_map(|r| r["id"].as_str().map(str::to_string)).collect(),
+                None => query_all(conn, "SELECT id FROM people", [])?
+                    .into_iter()
+                    .filter_map(|r| r["id"].as_str().map(str::to_string))
+                    .collect(),
             };
             let mut evaluated = 0;
             for pid in &people {
@@ -380,9 +440,17 @@ impl Service {
         };
         self.with_tx(|conn, now| {
             let delivered = modules::alerts::sweep(conn, now)?;
-            let expired = exec(conn, "UPDATE agent_approvals SET decision = 'expired' WHERE decision = 'pending' AND expires_at <= ?1", [now])?;
+            let expired = exec(
+                conn,
+                "UPDATE agent_approvals SET decision = 'expired' WHERE decision = 'pending' AND expires_at <= ?1",
+                [now],
+            )?;
             exec(conn, "DELETE FROM idempotency_keys WHERE expires_at <= ?1", [now])?;
-            exec(conn, "DELETE FROM events WHERE at < ?1", [openclaim_domain::dates::format_ts(time::OffsetDateTime::now_utc() - time::Duration::days(30))])?;
+            exec(
+                conn,
+                "DELETE FROM events WHERE at < ?1",
+                [openclaim_domain::dates::format_ts(time::OffsetDateTime::now_utc() - time::Duration::days(30))],
+            )?;
             Ok(json!({"alerts_delivered": delivered, "approvals_expired": expired, "sessions_expired": expired_sessions}))
         })
     }

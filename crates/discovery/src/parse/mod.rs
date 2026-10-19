@@ -97,9 +97,8 @@ pub fn absolute(base: &str, href: &str) -> Option<String> {
 static PROSE_DATE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+(\d{1,2}),?\s+(\d{4})\b").unwrap()
 });
-static MONTH_YEAR: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b").unwrap()
-});
+static MONTH_YEAR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b").unwrap());
 static DEADLINE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?is)(?:claim[s]?\s+(?:form[s]?\s+)?(?:must\s+be\s+)?(?:file[d]?|submit(?:ted)?|postmarked|received)|deadline(?:\s+to\s+file)?(?:\s+is)?|file\s+(?:a|your)\s+claim|submit\s+(?:a|your)\s+claim|apply\s+for\s+a\s+(?:refund|payment))[^.]{0,80}?\b(?:by|before|no\s+later\s+than|until|on\s+or\s+before|is)\s+((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},?\s+\d{4})").unwrap()
 });
@@ -125,7 +124,11 @@ pub fn month_year_to_date(s: &str, end: bool) -> Option<Date> {
     let month = time::Month::try_from(m).ok()?;
     let first = Date::from_calendar_date(y, month, 1).ok()?;
     if end {
-        let next = if m == 12 { Date::from_calendar_date(y + 1, time::Month::January, 1) } else { Date::from_calendar_date(y, month.next(), 1) };
+        let next = if m == 12 {
+            Date::from_calendar_date(y + 1, time::Month::January, 1)
+        } else {
+            Date::from_calendar_date(y, month.next(), 1)
+        };
         next.ok()?.previous_day()
     } else {
         Some(first)
@@ -158,31 +161,59 @@ pub fn sentence_around(text: &str, start: usize, end: usize) -> String {
 /// Deterministic claim status from official wording, with the sentence that supports it.
 pub fn infer_status(text: &str, deadline: Option<&str>, today: Date) -> (OpportunityStatus, String, String) {
     let lower = text.to_lowercase();
-    if let Some(d) = deadline {
-        if let Ok(dd) = parse_date(d) {
-            return if dd >= today {
-                (OpportunityStatus::Open, "online_form".into(), format!("claim deadline {d} is in the future"))
-            } else {
-                (OpportunityStatus::PastDeadline, "online_form".into(), format!("claim deadline {d} has passed"))
-            };
-        }
+    if let Some(d) = deadline
+        && let Ok(dd) = parse_date(d)
+    {
+        return if dd >= today {
+            (OpportunityStatus::Open, "online_form".into(), format!("claim deadline {d} is in the future"))
+        } else {
+            (OpportunityStatus::PastDeadline, "online_form".into(), format!("claim deadline {d} has passed"))
+        };
     }
     const AUTOMATIC: &[&str] = &[
-        "is sending", "are sending", "sent payments", "sending payments", "sending checks", "mailed checks", "checks totaling",
-        "payments totaling", "paypal payments", "will receive a payment", "no action is required", "do not need to file",
-        "distributed directly", "payments will be made", "sending more than", "sent more than",
+        "is sending",
+        "are sending",
+        "sent payments",
+        "sending payments",
+        "sending checks",
+        "mailed checks",
+        "checks totaling",
+        "payments totaling",
+        "paypal payments",
+        "will receive a payment",
+        "no action is required",
+        "do not need to file",
+        "distributed directly",
+        "payments will be made",
+        "sending more than",
+        "sent more than",
     ];
     if let Some(k) = AUTOMATIC.iter().find(|k| lower.contains(*k)) {
         let idx = lower.find(k).unwrap_or(0);
-        return (OpportunityStatus::AutomaticDistribution, "automatic".into(), sentence_around(text, idx, idx + k.len()));
+        return (
+            OpportunityStatus::AutomaticDistribution,
+            "automatic".into(),
+            sentence_around(text, idx, idx + k.len()),
+        );
     }
     const PENDING: &[&str] = &[
-        "proposed plan of distribution", "plan of distribution", "fund administrator", "distribution agent", "fair fund",
-        "claims process will", "will be announced", "claims process has not", "administrator will",
+        "proposed plan of distribution",
+        "plan of distribution",
+        "fund administrator",
+        "distribution agent",
+        "fair fund",
+        "claims process will",
+        "will be announced",
+        "claims process has not",
+        "administrator will",
     ];
     if let Some(k) = PENDING.iter().find(|k| lower.contains(*k)) {
         let idx = lower.find(k).unwrap_or(0);
-        return (OpportunityStatus::AwaitingAdministrator, "unknown".into(), sentence_around(text, idx, idx + k.len()));
+        return (
+            OpportunityStatus::AwaitingAdministrator,
+            "unknown".into(),
+            sentence_around(text, idx, idx + k.len()),
+        );
     }
     if lower.contains("file a claim") || lower.contains("claim form") || lower.contains("submit a claim") {
         let idx = lower.find("claim").unwrap_or(0);
@@ -195,8 +226,17 @@ pub fn infer_status(text: &str, deadline: Option<&str>, today: Date) -> (Opportu
 pub fn find_benefit(text: &str) -> Benefit {
     static MONEY: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\$\s?\d[\d,]*(?:\.\d+)?\s*(?:million|billion)?").unwrap());
     match MONEY.find(text) {
-        Some(m) => Benefit { amount_known: false, description: Some(format!("Source mentions {}; individual amounts vary and are not guaranteed.", m.as_str().trim())) },
-        None => Benefit { amount_known: false, description: None },
+        Some(m) => Benefit {
+            amount_known: false,
+            description: Some(format!(
+                "Source mentions {}; individual amounts vary and are not guaranteed.",
+                m.as_str().trim()
+            )),
+        },
+        None => Benefit {
+            amount_known: false,
+            description: None,
+        },
     }
 }
 
@@ -218,10 +258,16 @@ mod tests {
     #[test]
     fn status_inference() {
         let today = parse_date("2026-10-19").unwrap();
-        assert_eq!(infer_status("The FTC is sending 65,022 checks totaling more than $9.8 million", None, today).0, OpportunityStatus::AutomaticDistribution);
+        assert_eq!(
+            infer_status("The FTC is sending 65,022 checks totaling more than $9.8 million", None, today).0,
+            OpportunityStatus::AutomaticDistribution
+        );
         assert_eq!(infer_status("x", Some("2027-01-01"), today).0, OpportunityStatus::Open);
         assert_eq!(infer_status("x", Some("2020-01-01"), today).0, OpportunityStatus::PastDeadline);
-        assert_eq!(infer_status("The Commission published a notice of the proposed plan of distribution", None, today).0, OpportunityStatus::AwaitingAdministrator);
+        assert_eq!(
+            infer_status("The Commission published a notice of the proposed plan of distribution", None, today).0,
+            OpportunityStatus::AwaitingAdministrator
+        );
         assert_eq!(infer_status("nothing here", None, today).0, OpportunityStatus::Unknown);
     }
 

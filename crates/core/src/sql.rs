@@ -41,9 +41,23 @@ pub fn row_json(row: &Row<'_>) -> Result<Value, openclaim_db::rusqlite::Error> {
 fn is_bool_column(name: &str) -> bool {
     matches!(
         name,
-        "enabled" | "bookmarked" | "hidden" | "deadline_verified" | "free_only" | "positive" | "asserted_by_user" | "validated" | "stale"
-            | "automated_search" | "heir_claim" | "dry_run" | "cancel_requested" | "follow_detail_pages" | "automation_allowed"
-            | "user_confirmed" | "terms_confirmed"
+        "enabled"
+            | "bookmarked"
+            | "hidden"
+            | "deadline_verified"
+            | "free_only"
+            | "positive"
+            | "asserted_by_user"
+            | "validated"
+            | "stale"
+            | "automated_search"
+            | "heir_claim"
+            | "dry_run"
+            | "cancel_requested"
+            | "follow_detail_pages"
+            | "automation_allowed"
+            | "user_confirmed"
+            | "terms_confirmed"
     )
 }
 
@@ -96,7 +110,9 @@ pub fn encode_cursor(offset: u64, snapshot: &str) -> String {
 
 pub fn decode_cursor(cursor: &str) -> OcResult<(u64, String)> {
     use base64::Engine;
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(cursor).map_err(|_| OcError::invalid("malformed cursor"))?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|_| OcError::invalid("malformed cursor"))?;
     let s = String::from_utf8(bytes).map_err(|_| OcError::invalid("malformed cursor"))?;
     let (o, snap) = s.split_once('|').ok_or_else(|| OcError::invalid("malformed cursor"))?;
     Ok((o.parse().map_err(|_| OcError::invalid("malformed cursor"))?, snap.to_string()))

@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "OpenClaim Assistant",
+  "version": "0.1.0",
+  "description": "Previews and fills non-sensitive claim fields from your local OpenClaim vault on sites you approve. Never clicks Submit.",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "optional_host_permissions": ["https://*/*"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "background": { "service_worker": "src/background.js" },
+  "action": { "default_popup": "src/popup.html", "default_title": "OpenClaim Assistant" },
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'" }
+}

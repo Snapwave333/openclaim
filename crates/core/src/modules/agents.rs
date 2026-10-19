@@ -35,7 +35,11 @@ fn op_owner_init(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         return Err(OcError::invalid("passphrase must be at least 8 characters"));
     }
     let hash = hash_passphrase(&p.passphrase).map_err(OcError::internal)?;
-    exec(ctx.conn, "INSERT INTO owner(id, passphrase_hash, created_at, updated_at) VALUES ('owner', ?1, ?2, ?2)", (&hash, &ctx.now))?;
+    exec(
+        ctx.conn,
+        "INSERT INTO owner(id, passphrase_hash, created_at, updated_at) VALUES ('owner', ?1, ?2, ?2)",
+        (&hash, &ctx.now),
+    )?;
     ctx.audit("owner.init", "owner", json!({}))?;
     Ok(json!({"initialized": true, "note": "keep this passphrase; it gates approvals, personal data and the GUI"}))
 }
@@ -57,7 +61,10 @@ fn op_owner_unlock(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         let now = time::OffsetDateTime::now_utc();
         attempts.retain(|t| now - *t < time::Duration::minutes(1));
         if attempts.len() >= 5 {
-            return Err(OcError::new(openclaim_domain::ErrorCode::Unavailable, "too many unlock attempts; wait a minute"));
+            return Err(OcError::new(
+                openclaim_domain::ErrorCode::Unavailable,
+                "too many unlock attempts; wait a minute",
+            ));
         }
         attempts.push(now);
     }
@@ -69,12 +76,24 @@ fn op_owner_unlock(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         ctx.audit("owner.unlock_failed", "owner", json!({"transport": ctx.transport}))?;
         return Err(OcError::denied("passphrase does not match"));
     }
-    let ttl = p.ttl_minutes.unwrap_or_else(|| crate::modules::config::get_u64(ctx.conn, "session.ttl_minutes", 60)).clamp(1, 1440);
+    let ttl = p
+        .ttl_minutes
+        .unwrap_or_else(|| crate::modules::config::get_u64(ctx.conn, "session.ttl_minutes", 60))
+        .clamp(1, 1440);
     let token = new_token("ocs");
     let expires = time::OffsetDateTime::now_utc() + time::Duration::minutes(ttl as i64);
-    ctx.svc.inner.sessions.lock().map_err(|_| OcError::internal("lock"))?.insert(token.clone(), crate::OwnerSession { id: token.clone(), expires_at: expires, transport: ctx.transport.clone() });
+    ctx.svc.inner.sessions.lock().map_err(|_| OcError::internal("lock"))?.insert(
+        token.clone(),
+        crate::OwnerSession {
+            id: token.clone(),
+            expires_at: expires,
+            transport: ctx.transport.clone(),
+        },
+    );
     ctx.audit("owner.unlock", "owner", json!({"transport": ctx.transport, "ttl_minutes": ttl}))?;
-    Ok(json!({"session": token, "expires_at": openclaim_domain::dates::format_ts(expires), "note": "export OPENCLAIM_SESSION in your shell; sessions live only in daemon memory"}))
+    Ok(
+        json!({"session": token, "expires_at": openclaim_domain::dates::format_ts(expires), "note": "export OPENCLAIM_SESSION in your shell; sessions live only in daemon memory"}),
+    )
 }
 
 fn op_owner_lock(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
@@ -99,8 +118,17 @@ fn op_owner_set_passphrase(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     if p.new.chars().count() < 8 {
         return Err(OcError::invalid("new passphrase must be at least 8 characters"));
     }
-    exec(ctx.conn, "UPDATE owner SET passphrase_hash = ?1, updated_at = ?2 WHERE id = 'owner'", (hash_passphrase(&p.new).map_err(OcError::internal)?, &ctx.now))?;
-    ctx.svc.inner.sessions.lock().map_err(|_| OcError::internal("lock"))?.retain(|_, s| s.transport == "system");
+    exec(
+        ctx.conn,
+        "UPDATE owner SET passphrase_hash = ?1, updated_at = ?2 WHERE id = 'owner'",
+        (hash_passphrase(&p.new).map_err(OcError::internal)?, &ctx.now),
+    )?;
+    ctx.svc
+        .inner
+        .sessions
+        .lock()
+        .map_err(|_| OcError::internal("lock"))?
+        .retain(|_, s| s.transport == "system");
     Ok(json!({"changed": true, "note": "all owner sessions were ended"}))
 }
 
@@ -149,25 +177,57 @@ fn op_register(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     }
     let id = openclaim_db::new_id();
     let token = new_token(if kind == "extension" { "ocx" } else { "oca" });
-    let expires = p.expires_in_days.map(|d| openclaim_domain::dates::format_ts(time::OffsetDateTime::now_utc() + time::Duration::days(d as i64)));
+    let expires = p
+        .expires_in_days
+        .map(|d| openclaim_domain::dates::format_ts(time::OffsetDateTime::now_utc() + time::Duration::days(d as i64)));
     exec(
         ctx.conn,
         "INSERT INTO agent_principals(id, display_name, kind, token_hash, executor_fingerprint, scopes_json, allowed_origin, created_at, expires_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-        (&id, p.name.trim(), kind, hash_token(&token), &ctx.transport, serde_json::to_string(&p.scopes)?, &p.allowed_origin, &ctx.now, &expires),
+        (
+            &id,
+            p.name.trim(),
+            kind,
+            hash_token(&token),
+            &ctx.transport,
+            serde_json::to_string(&p.scopes)?,
+            &p.allowed_origin,
+            &ctx.now,
+            &expires,
+        ),
     )?;
     ctx.audit("agents.register", &id, json!({"name": p.name, "scopes": p.scopes, "kind": kind}))?;
-    Ok(json!({"agent_id": id, "name": p.name.trim(), "kind": kind, "scopes": p.scopes, "expires_at": expires, "token": if ctx.dry_run { Value::Null } else { json!(token) }, "note": "the token is shown once; give it to the agent as OPENCLAIM_AGENT_TOKEN"}))
+    Ok(
+        json!({"agent_id": id, "name": p.name.trim(), "kind": kind, "scopes": p.scopes, "expires_at": expires, "token": if ctx.dry_run { Value::Null } else { json!(token) }, "note": "the token is shown once; give it to the agent as OPENCLAIM_AGENT_TOKEN"}),
+    )
 }
 
 fn op_list(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
-    Ok(json!({"items": query_all(ctx.conn, "SELECT id, display_name, kind, scopes_json, allowed_origin, created_at, expires_at, revoked_at FROM agent_principals ORDER BY created_at", [])?}))
+    Ok(
+        json!({"items": query_all(ctx.conn, "SELECT id, display_name, kind, scopes_json, allowed_origin, created_at, expires_at, revoked_at FROM agent_principals ORDER BY created_at", [])?}),
+    )
 }
 
 fn op_show(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: IdParam = parse_params(p)?;
-    let row = require(query_one(ctx.conn, "SELECT id, display_name, kind, scopes_json, allowed_origin, executor_fingerprint, created_at, expires_at, revoked_at FROM agent_principals WHERE id = ?1", [&p.id])?, "agent", &p.id)?;
-    let sessions = query_all(ctx.conn, "SELECT id, transport, started_at, last_seen FROM agent_sessions WHERE principal_id = ?1 ORDER BY last_seen DESC LIMIT 20", [&p.id])?;
-    let pending = query_all(ctx.conn, "SELECT id, op, decision, created_at, expires_at FROM agent_approvals WHERE principal_id = ?1 AND decision = 'pending'", [&p.id])?;
+    let row = require(
+        query_one(
+            ctx.conn,
+            "SELECT id, display_name, kind, scopes_json, allowed_origin, executor_fingerprint, created_at, expires_at, revoked_at FROM agent_principals WHERE id = ?1",
+            [&p.id],
+        )?,
+        "agent",
+        &p.id,
+    )?;
+    let sessions = query_all(
+        ctx.conn,
+        "SELECT id, transport, started_at, last_seen FROM agent_sessions WHERE principal_id = ?1 ORDER BY last_seen DESC LIMIT 20",
+        [&p.id],
+    )?;
+    let pending = query_all(
+        ctx.conn,
+        "SELECT id, op, decision, created_at, expires_at FROM agent_approvals WHERE principal_id = ?1 AND decision = 'pending'",
+        [&p.id],
+    )?;
     Ok(json!({"agent": row, "sessions": sessions, "pending_approvals": pending}))
 }
 
@@ -183,7 +243,11 @@ pub struct AuthorizeParams {
 fn op_authorize(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: AuthorizeParams = parse_params(p)?;
     check_scopes(&p.add_scopes)?;
-    let row = require(query_one(ctx.conn, "SELECT scopes_json, revoked_at FROM agent_principals WHERE id = ?1", [&p.id])?, "agent", &p.id)?;
+    let row = require(
+        query_one(ctx.conn, "SELECT scopes_json, revoked_at FROM agent_principals WHERE id = ?1", [&p.id])?,
+        "agent",
+        &p.id,
+    )?;
     if !row["revoked_at"].is_null() {
         return Err(OcError::conflict("agent is revoked"));
     }
@@ -194,30 +258,65 @@ fn op_authorize(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
             scopes.push(s);
         }
     }
-    exec(ctx.conn, "UPDATE agent_principals SET scopes_json = ?2 WHERE id = ?1", (&p.id, serde_json::to_string(&scopes)?))?;
+    exec(
+        ctx.conn,
+        "UPDATE agent_principals SET scopes_json = ?2 WHERE id = ?1",
+        (&p.id, serde_json::to_string(&scopes)?),
+    )?;
     ctx.audit("agents.authorize", &p.id, json!({"scopes": scopes}))?;
     Ok(json!({"agent_id": p.id, "scopes": scopes}))
 }
 
 fn op_scopes(_ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
-    Ok(json!({"scopes": ALL_SCOPES.iter().map(|(s, d)| json!({"scope": s, "description": d, "owner_only": OWNER_ONLY_SCOPES.contains(s)})).collect::<Vec<_>>(), "note": "no scope allows official claim submission"}))
+    Ok(
+        json!({"scopes": ALL_SCOPES.iter().map(|(s, d)| json!({"scope": s, "description": d, "owner_only": OWNER_ONLY_SCOPES.contains(s)})).collect::<Vec<_>>(), "note": "no scope allows official claim submission"}),
+    )
 }
 
 fn op_sessions(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
-    let agents = query_all(ctx.conn, "SELECT s.id, s.principal_id, p.display_name, s.transport, s.started_at, s.last_seen FROM agent_sessions s JOIN agent_principals p ON p.id = s.principal_id WHERE p.revoked_at IS NULL ORDER BY s.last_seen DESC LIMIT 100", [])?;
-    let owner: Vec<Value> = ctx.svc.inner.sessions.lock().map_err(|_| OcError::internal("lock"))?.values().filter(|s| s.transport != "system").map(|s| json!({"transport": s.transport, "expires_at": openclaim_domain::dates::format_ts(s.expires_at)})).collect();
+    let agents = query_all(
+        ctx.conn,
+        "SELECT s.id, s.principal_id, p.display_name, s.transport, s.started_at, s.last_seen FROM agent_sessions s JOIN agent_principals p ON p.id = s.principal_id WHERE p.revoked_at IS NULL ORDER BY s.last_seen DESC LIMIT 100",
+        [],
+    )?;
+    let owner: Vec<Value> = ctx
+        .svc
+        .inner
+        .sessions
+        .lock()
+        .map_err(|_| OcError::internal("lock"))?
+        .values()
+        .filter(|s| s.transport != "system")
+        .map(|s| json!({"transport": s.transport, "expires_at": openclaim_domain::dates::format_ts(s.expires_at)}))
+        .collect();
     Ok(json!({"agents": agents, "owner_sessions": owner}))
 }
 
 fn op_revoke(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: IdParam = parse_params(p)?;
-    let n = exec(ctx.conn, "UPDATE agent_principals SET revoked_at = ?2 WHERE id = ?1 AND revoked_at IS NULL", (&p.id, &ctx.now))?;
+    let n = exec(
+        ctx.conn,
+        "UPDATE agent_principals SET revoked_at = ?2 WHERE id = ?1 AND revoked_at IS NULL",
+        (&p.id, &ctx.now),
+    )?;
     if n == 0 {
         return Err(OcError::not_found("agent not found or already revoked"));
     }
-    exec(ctx.conn, "UPDATE agent_approvals SET decision = 'invalidated', decided_at = ?2 WHERE principal_id = ?1 AND decision IN ('pending','approved')", (&p.id, &ctx.now))?;
-    let cancelled = exec(ctx.conn, "UPDATE jobs SET state = 'cancelled', cancel_requested = 1, finished_at = ?2, updated_at = ?2 WHERE owner_actor_id = ?1 AND state IN ('queued','paused_for_approval')", (format!("agent:{}", p.id), &ctx.now))?;
-    exec(ctx.conn, "UPDATE jobs SET cancel_requested = 1 WHERE owner_actor_id = ?1 AND state = 'running'", [format!("agent:{}", p.id)])?;
+    exec(
+        ctx.conn,
+        "UPDATE agent_approvals SET decision = 'invalidated', decided_at = ?2 WHERE principal_id = ?1 AND decision IN ('pending','approved')",
+        (&p.id, &ctx.now),
+    )?;
+    let cancelled = exec(
+        ctx.conn,
+        "UPDATE jobs SET state = 'cancelled', cancel_requested = 1, finished_at = ?2, updated_at = ?2 WHERE owner_actor_id = ?1 AND state IN ('queued','paused_for_approval')",
+        (format!("agent:{}", p.id), &ctx.now),
+    )?;
+    exec(
+        ctx.conn,
+        "UPDATE jobs SET cancel_requested = 1 WHERE owner_actor_id = ?1 AND state = 'running'",
+        [format!("agent:{}", p.id)],
+    )?;
     ctx.audit("agents.revoke", &p.id, json!({"jobs_cancelled": cancelled}))?;
     ctx.emit("agent.revoked", json!({"agent_id": p.id}))?;
     Ok(json!({"agent_id": p.id, "revoked": true, "jobs_cancelled": cancelled}))
@@ -259,18 +358,26 @@ fn op_approvals_list(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
 
 fn op_approvals_show(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: IdParam = parse_params(p)?;
-    let row = require(query_one(ctx.conn, "SELECT a.*, p.display_name FROM agent_approvals a JOIN agent_principals p ON p.id = a.principal_id WHERE a.id = ?1", [&p.id])?, "approval", &p.id)?;
-    if let Some(pid) = ctx.actor.principal_id() {
-        if row["principal_id"] != pid {
-            return Err(OcError::not_found("approval not found"));
-        }
+    let row = require(
+        query_one(
+            ctx.conn,
+            "SELECT a.*, p.display_name FROM agent_approvals a JOIN agent_principals p ON p.id = a.principal_id WHERE a.id = ?1",
+            [&p.id],
+        )?,
+        "approval",
+        &p.id,
+    )?;
+    if let Some(pid) = ctx.actor.principal_id()
+        && row["principal_id"] != pid
+    {
+        return Err(OcError::not_found("approval not found"));
     }
     let mut row = row;
-    if !ctx.actor.is_owner() {
-        if let Some(o) = row.as_object_mut() {
-            o.remove("params");
-            o.remove("binding");
-        }
+    if !ctx.actor.is_owner()
+        && let Some(o) = row.as_object_mut()
+    {
+        o.remove("params");
+        o.remove("binding");
     }
     Ok(row)
 }
@@ -293,13 +400,32 @@ fn op_approvals_request(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     }
     let binding = crate::authz::compute_binding(ctx.conn, &p.params)?;
     let digest = crate::authz::action_digest(op.name, &p.params, &pid, &binding);
-    if let Some(existing) = scalar::<String, _>(ctx.conn, "SELECT id FROM agent_approvals WHERE action_digest = ?1 AND principal_id = ?2 AND decision = 'pending' AND expires_at > ?3", (&digest, &pid, &ctx.now))? {
+    if let Some(existing) = scalar::<String, _>(
+        ctx.conn,
+        "SELECT id FROM agent_approvals WHERE action_digest = ?1 AND principal_id = ?2 AND decision = 'pending' AND expires_at > ?3",
+        (&digest, &pid, &ctx.now),
+    )? {
         return Ok(json!({"approval_id": existing, "decision": "pending", "existing": true}));
     }
     let id = openclaim_db::new_id();
     let expires = openclaim_domain::dates::format_ts(time::OffsetDateTime::now_utc() + time::Duration::minutes(crate::authz::APPROVAL_TTL_MINUTES));
     let preview = json!({"op": op.name, "summary": op.summary, "effect": op.effect, "params": openclaim_security::redact::redact_json(&p.params)});
-    exec(ctx.conn, "INSERT INTO agent_approvals(id, principal_id, op, action_digest, scope, params_json, binding_json, preview_json, created_at, expires_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)", (&id, &pid, op.name, &digest, op.scope, p.params.to_string(), binding.to_string(), preview.to_string(), &ctx.now, &expires))?;
+    exec(
+        ctx.conn,
+        "INSERT INTO agent_approvals(id, principal_id, op, action_digest, scope, params_json, binding_json, preview_json, created_at, expires_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+        (
+            &id,
+            &pid,
+            op.name,
+            &digest,
+            op.scope,
+            p.params.to_string(),
+            binding.to_string(),
+            preview.to_string(),
+            &ctx.now,
+            &expires,
+        ),
+    )?;
     ctx.emit("approval.requested", json!({"approval_id": id, "principal_id": pid, "op": op.name}))?;
     Ok(json!({"approval_id": id, "decision": "pending", "expires_at": expires}))
 }
@@ -312,7 +438,15 @@ pub struct DecideParams {
 }
 
 fn decide(ctx: &mut Ctx<'_>, id: &str, approve: bool) -> OcResult<Value> {
-    let row = require(query_one(ctx.conn, "SELECT id, decision, expires_at, op, action_digest, params_json, principal_id FROM agent_approvals WHERE id = ?1", [id])?, "approval", id)?;
+    let row = require(
+        query_one(
+            ctx.conn,
+            "SELECT id, decision, expires_at, op, action_digest, params_json, principal_id FROM agent_approvals WHERE id = ?1",
+            [id],
+        )?,
+        "approval",
+        id,
+    )?;
     if row["decision"] != "pending" {
         return Err(OcError::conflict(format!("approval is already {}", row["decision"])));
     }
@@ -326,17 +460,35 @@ fn decide(ctx: &mut Ctx<'_>, id: &str, approve: bool) -> OcResult<Value> {
         let binding = crate::authz::compute_binding(ctx.conn, &params)?;
         let digest = crate::authz::action_digest(row["op"].as_str().unwrap_or(""), &params, row["principal_id"].as_str().unwrap_or(""), &binding);
         if row["action_digest"].as_str() != Some(&digest) {
-            exec(ctx.conn, "UPDATE agent_approvals SET decision = 'invalidated', decided_at = ?2 WHERE id = ?1", (id, &ctx.now))?;
-            return Err(OcError::conflict("the records this action refers to changed since the request; it was invalidated"));
+            exec(
+                ctx.conn,
+                "UPDATE agent_approvals SET decision = 'invalidated', decided_at = ?2 WHERE id = ?1",
+                (id, &ctx.now),
+            )?;
+            return Err(OcError::conflict(
+                "the records this action refers to changed since the request; it was invalidated",
+            ));
         }
     }
     let decision = if approve { "approved" } else { "denied" };
-    exec(ctx.conn, "UPDATE agent_approvals SET decision = ?2, decided_by = ?3, decided_at = ?4 WHERE id = ?1", (id, decision, ctx.actor_id(), &ctx.now))?;
-    ctx.audit(if approve { "approvals.approve" } else { "approvals.deny" }, id, json!({"op": row["op"], "principal_id": row["principal_id"]}))?;
+    exec(
+        ctx.conn,
+        "UPDATE agent_approvals SET decision = ?2, decided_by = ?3, decided_at = ?4 WHERE id = ?1",
+        (id, decision, ctx.actor_id(), &ctx.now),
+    )?;
+    ctx.audit(
+        if approve { "approvals.approve" } else { "approvals.deny" },
+        id,
+        json!({"op": row["op"], "principal_id": row["principal_id"]}),
+    )?;
     ctx.emit("approval.decided", json!({"approval_id": id, "decision": decision}))?;
     if approve {
         // Paused workflow jobs owned by that principal can continue.
-        let n = exec(ctx.conn, "UPDATE jobs SET state = 'queued', next_run_at = ?2, updated_at = ?2, error_code = NULL, error_message = NULL WHERE state = 'paused_for_approval' AND owner_actor_id = ?1", (format!("agent:{}", row["principal_id"].as_str().unwrap_or("")), &ctx.now))?;
+        let n = exec(
+            ctx.conn,
+            "UPDATE jobs SET state = 'queued', next_run_at = ?2, updated_at = ?2, error_code = NULL, error_message = NULL WHERE state = 'paused_for_approval' AND owner_actor_id = ?1",
+            (format!("agent:{}", row["principal_id"].as_str().unwrap_or("")), &ctx.now),
+        )?;
         if n > 0 {
             ctx.jobs_enqueued = true;
         }
@@ -355,7 +507,11 @@ fn op_deny(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
 }
 
 fn op_expire(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
-    let n = exec(ctx.conn, "UPDATE agent_approvals SET decision = 'expired' WHERE decision = 'pending' AND expires_at <= ?1", [&ctx.now])?;
+    let n = exec(
+        ctx.conn,
+        "UPDATE agent_approvals SET decision = 'expired' WHERE decision = 'pending' AND expires_at <= ?1",
+        [&ctx.now],
+    )?;
     Ok(json!({"expired": n}))
 }
 
@@ -364,7 +520,14 @@ fn op_expire(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
 fn op_audit_list(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: PageParams = parse_params(p)?;
     let pager = Pager::from(&p, &ctx.now)?;
-    let rows = query_all(ctx.conn, &format!("SELECT seq, id, actor, action, timestamp, redacted_subject, details_json, integrity_hash FROM audit_log WHERE timestamp <= ?1 ORDER BY seq DESC{}", pager.sql_limit()), [&pager.snapshot])?;
+    let rows = query_all(
+        ctx.conn,
+        &format!(
+            "SELECT seq, id, actor, action, timestamp, redacted_subject, details_json, integrity_hash FROM audit_log WHERE timestamp <= ?1 ORDER BY seq DESC{}",
+            pager.sql_limit()
+        ),
+        [&pager.snapshot],
+    )?;
     Ok(pager.wrap(rows, None))
 }
 
@@ -385,9 +548,21 @@ fn op_audit_export(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         path: Option<String>,
     }
     let p: P = parse_params(p)?;
-    let rows = query_all(ctx.conn, "SELECT seq, id, actor, action, timestamp, redacted_subject, details_json, prev_hash, integrity_hash FROM audit_log ORDER BY seq", [])?;
-    let runs = query_all(ctx.conn, "SELECT actor_id, command, args_redacted_json, result, dry_run, created_at FROM command_runs ORDER BY created_at", [])?;
-    let disclosures = query_all(ctx.conn, "SELECT principal_id, subject_kind, subject_id, fields, at FROM data_disclosures ORDER BY at", [])?;
+    let rows = query_all(
+        ctx.conn,
+        "SELECT seq, id, actor, action, timestamp, redacted_subject, details_json, prev_hash, integrity_hash FROM audit_log ORDER BY seq",
+        [],
+    )?;
+    let runs = query_all(
+        ctx.conn,
+        "SELECT actor_id, command, args_redacted_json, result, dry_run, created_at FROM command_runs ORDER BY created_at",
+        [],
+    )?;
+    let disclosures = query_all(
+        ctx.conn,
+        "SELECT principal_id, subject_kind, subject_id, fields, at FROM data_disclosures ORDER BY at",
+        [],
+    )?;
     let export = json!({"exported_at": ctx.now, "audit_log": rows, "command_runs": runs, "disclosures": disclosures});
     if let Some(path) = &p.path {
         if !ctx.dry_run {
@@ -400,28 +575,142 @@ fn op_audit_export(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
 
 pub fn ops() -> Vec<OpSpec> {
     vec![
-        op!("owner.init", "schema.read", Write, "Set the owner passphrase on first run", PassphraseParam, op_owner_init),
-        op!("owner.unlock", "schema.read", Write, "Prove the passphrase; returns a memory-only session", UnlockParams, op_owner_unlock),
+        op!(
+            "owner.init",
+            "schema.read",
+            Write,
+            "Set the owner passphrase on first run",
+            PassphraseParam,
+            op_owner_init
+        ),
+        op!(
+            "owner.unlock",
+            "schema.read",
+            Write,
+            "Prove the passphrase; returns a memory-only session",
+            UnlockParams,
+            op_owner_unlock
+        ),
         op!("owner.lock", "schema.read", Write, "End the current owner session", super::Empty, op_owner_lock),
-        op!("owner.set_passphrase", "agents.manage", OwnerOnly, "Change the owner passphrase", SetPassphraseParams, op_owner_set_passphrase),
-        op!("owner.status", "schema.read", Read, "Who the daemon thinks you are", super::Empty, op_owner_status),
-        op!("agents.register", "agents.manage", OwnerOnly, "Register a named agent or extension principal; shows the token once", RegisterParams, op_register),
+        op!(
+            "owner.set_passphrase",
+            "agents.manage",
+            OwnerOnly,
+            "Change the owner passphrase",
+            SetPassphraseParams,
+            op_owner_set_passphrase
+        ),
+        op!(
+            "owner.status",
+            "schema.read",
+            Read,
+            "Who the daemon thinks you are",
+            super::Empty,
+            op_owner_status
+        ),
+        op!(
+            "agents.register",
+            "agents.manage",
+            OwnerOnly,
+            "Register a named agent or extension principal; shows the token once",
+            RegisterParams,
+            op_register
+        ),
         op!("agents.list", "agents.manage", OwnerOnly, "List principals", super::Empty, op_list),
-        op!("agents.show", "agents.manage", OwnerOnly, "Principal details, sessions and pending approvals", IdParam, op_show),
-        op!("agents.authorize", "agents.manage", OwnerOnly, "Add or remove scopes", AuthorizeParams, op_authorize),
+        op!(
+            "agents.show",
+            "agents.manage",
+            OwnerOnly,
+            "Principal details, sessions and pending approvals",
+            IdParam,
+            op_show
+        ),
+        op!(
+            "agents.authorize",
+            "agents.manage",
+            OwnerOnly,
+            "Add or remove scopes",
+            AuthorizeParams,
+            op_authorize
+        ),
         op!("agents.scopes", "schema.read", Read, "All capability scopes", super::Empty, op_scopes),
-        op!("agents.sessions", "agents.manage", OwnerOnly, "Active agent and owner sessions", super::Empty, op_sessions),
-        op!("agents.revoke", "agents.manage", OwnerOnly, "Revoke a principal and cancel its queued work", IdParam, op_revoke),
-        op!("agents.audit", "agents.manage", OwnerOnly, "What an agent ran, read and proposed", IdParam, op_audit),
-        op!("approvals.list", "jobs.read", Read, "Pending and decided approvals (agents see their own)", PageParams, op_approvals_list),
-        op!("approvals.show", "jobs.read", Read, "Approval preview and state", IdParam, op_approvals_show, mcp = "get_approval_status"),
-        op!("approvals.request", "jobs.read", Write, "Agent: request a human decision for a named action", RequestApprovalParams, op_approvals_request, mcp = "request_approval"),
-        op!("approvals.approve", "approvals.decide", OwnerOnly, "Approve the exact action (digest-bound)", DecideParams, op_approve),
+        op!(
+            "agents.sessions",
+            "agents.manage",
+            OwnerOnly,
+            "Active agent and owner sessions",
+            super::Empty,
+            op_sessions
+        ),
+        op!(
+            "agents.revoke",
+            "agents.manage",
+            OwnerOnly,
+            "Revoke a principal and cancel its queued work",
+            IdParam,
+            op_revoke
+        ),
+        op!(
+            "agents.audit",
+            "agents.manage",
+            OwnerOnly,
+            "What an agent ran, read and proposed",
+            IdParam,
+            op_audit
+        ),
+        op!(
+            "approvals.list",
+            "jobs.read",
+            Read,
+            "Pending and decided approvals (agents see their own)",
+            PageParams,
+            op_approvals_list
+        ),
+        op!(
+            "approvals.show",
+            "jobs.read",
+            Read,
+            "Approval preview and state",
+            IdParam,
+            op_approvals_show,
+            mcp = "get_approval_status"
+        ),
+        op!(
+            "approvals.request",
+            "jobs.read",
+            Write,
+            "Agent: request a human decision for a named action",
+            RequestApprovalParams,
+            op_approvals_request,
+            mcp = "request_approval"
+        ),
+        op!(
+            "approvals.approve",
+            "approvals.decide",
+            OwnerOnly,
+            "Approve the exact action (digest-bound)",
+            DecideParams,
+            op_approve
+        ),
         op!("approvals.deny", "approvals.decide", OwnerOnly, "Deny an approval", DecideParams, op_deny),
-        op!("approvals.expire", "approvals.decide", OwnerOnly, "Expire overdue approvals now", super::Empty, op_expire),
+        op!(
+            "approvals.expire",
+            "approvals.decide",
+            OwnerOnly,
+            "Expire overdue approvals now",
+            super::Empty,
+            op_expire
+        ),
         op!("audit.list", "audit.read", Read, "Audit trail (newest first)", PageParams, op_audit_list),
         op!("audit.show", "audit.read", Read, "One audit entry", IdParam, op_audit_show),
         op!("audit.verify", "audit.read", Read, "Verify the audit hash chain", super::Empty, op_audit_verify),
-        op!("audit.export", "audit.read", Read, "Export audit log, command runs and disclosures", super::Empty, op_audit_export),
+        op!(
+            "audit.export",
+            "audit.read",
+            Read,
+            "Export audit log, command runs and disclosures",
+            super::Empty,
+            op_audit_export
+        ),
     ]
 }

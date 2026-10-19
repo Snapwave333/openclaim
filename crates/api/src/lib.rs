@@ -51,9 +51,13 @@ fn allowed_hosts(port: u16) -> Vec<String> {
 
 fn extension_origins(svc: &Service) -> Vec<String> {
     let Ok(guard) = svc.inner.db.lock() else { return vec![] };
-    openclaim_core::sql::query_all(&guard.conn, "SELECT allowed_origin FROM agent_principals WHERE kind = 'extension' AND revoked_at IS NULL AND allowed_origin IS NOT NULL", [])
-        .map(|rows| rows.into_iter().filter_map(|r| r["allowed_origin"].as_str().map(str::to_string)).collect())
-        .unwrap_or_default()
+    openclaim_core::sql::query_all(
+        &guard.conn,
+        "SELECT allowed_origin FROM agent_principals WHERE kind = 'extension' AND revoked_at IS NULL AND allowed_origin IS NOT NULL",
+        [],
+    )
+    .map(|rows| rows.into_iter().filter_map(|r| r["allowed_origin"].as_str().map(str::to_string)).collect())
+    .unwrap_or_default()
 }
 
 /// Host + Origin checks, security headers, CORS for paired extensions.
@@ -63,7 +67,16 @@ async fn guard(State(st): State<AppState>, req: HttpRequest<Body>, next: Next) -
         return (StatusCode::FORBIDDEN, "host not allowed").into_response();
     }
     let origin = req.headers().get(header::ORIGIN).and_then(|h| h.to_str().ok()).map(str::to_string);
-    let local_origins: Vec<String> = allowed_hosts(st.port).iter().map(|h| format!("http://{h}")).collect();
+    let mut local_origins: Vec<String> = allowed_hosts(st.port).iter().map(|h| format!("http://{h}")).collect();
+    // Development only: `OPENCLAIM_DEV_ORIGINS=http://localhost:4200` lets `ng serve` proxy to the daemon.
+    if let Ok(extra) = std::env::var("OPENCLAIM_DEV_ORIGINS") {
+        local_origins.extend(
+            extra
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| s.starts_with("http://localhost:") || s.starts_with("http://127.0.0.1:")),
+        );
+    }
     let mut cors_origin: Option<String> = None;
     if let Some(o) = &origin {
         if local_origins.contains(o) {
@@ -118,10 +131,13 @@ fn cookie_value(headers: &HeaderMap) -> Option<String> {
 
 /// Builds credentials from a Bearer agent token or the session cookie (with CSRF for mutations).
 fn credentials(st: &AppState, headers: &HeaderMap, mutation: bool) -> Result<Credentials, ApiError> {
-    if let Some(auth) = headers.get(header::AUTHORIZATION).and_then(|h| h.to_str().ok()) {
-        if let Some(tok) = auth.strip_prefix("Bearer ") {
-            return Ok(Credentials { session: None, agent_token: Some(tok.trim().to_string()) });
-        }
+    if let Some(auth) = headers.get(header::AUTHORIZATION).and_then(|h| h.to_str().ok())
+        && let Some(tok) = auth.strip_prefix("Bearer ")
+    {
+        return Ok(Credentials {
+            session: None,
+            agent_token: Some(tok.trim().to_string()),
+        });
     }
     if let Some(session) = cookie_value(headers) {
         if mutation {
@@ -132,7 +148,10 @@ fn credentials(st: &AppState, headers: &HeaderMap, mutation: bool) -> Result<Cre
                 _ => return Err(fail(OcError::denied("missing or invalid CSRF token"))),
             }
         }
-        return Ok(Credentials { session: Some(session), agent_token: None });
+        return Ok(Credentials {
+            session: Some(session),
+            agent_token: None,
+        });
     }
     Ok(Credentials::default())
 }
@@ -141,7 +160,9 @@ async fn run(st: &AppState, mut req: Request, headers: &HeaderMap, mutation: boo
     req.credentials = credentials(st, headers, mutation)?;
     req.transport = "http".into();
     let svc = st.svc.clone();
-    let env = tokio::task::spawn_blocking(move || svc.execute(req)).await.map_err(|_| fail(OcError::internal("request task panicked")))?;
+    let env = tokio::task::spawn_blocking(move || svc.execute(req))
+        .await
+        .map_err(|_| fail(OcError::internal("request task panicked")))?;
     Ok(env)
 }
 
@@ -205,7 +226,12 @@ macro_rules! get_op {
 
 macro_rules! get_op_id {
     ($name:ident, $op:literal, $key:literal) => {
-        async fn $name(State(st): State<AppState>, headers: HeaderMap, Path(id): Path<String>, Query(q): Query<HashMap<String, String>>) -> Result<Response, ApiError> {
+        async fn $name(
+            State(st): State<AppState>,
+            headers: HeaderMap,
+            Path(id): Path<String>,
+            Query(q): Query<HashMap<String, String>>,
+        ) -> Result<Response, ApiError> {
             let mut p = query_to_params(q);
             p[$key] = json!(id);
             if let Some(inc) = p.get("include").and_then(|v| v.as_str()).map(str::to_string) {
@@ -269,7 +295,9 @@ async fn approval_decision(State(st): State<AppState>, headers: HeaderMap, Path(
             return Err(fail(OcError::conflict("the approval changed since it was displayed")));
         }
     }
-    Ok(respond(run(&st, Request::new(op, json!({"id": id, "note": body["note"]})), &headers, true).await?))
+    Ok(respond(
+        run(&st, Request::new(op, json!({"id": id, "note": body["note"]})), &headers, true).await?,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -281,13 +309,22 @@ async fn login(State(st): State<AppState>, headers: HeaderMap, Json(body): Json<
     let mut req = Request::new("owner.unlock", json!({"passphrase": body.passphrase}));
     req.transport = "http".into();
     let svc = st.svc.clone();
-    let env = tokio::task::spawn_blocking(move || svc.execute(req)).await.map_err(|_| fail(OcError::internal("task panicked")))?;
+    let env = tokio::task::spawn_blocking(move || svc.execute(req))
+        .await
+        .map_err(|_| fail(OcError::internal("task panicked")))?;
     let _ = headers;
     let Some(data) = env.data.clone() else { return Ok(respond(env)) };
     let session = data["session"].as_str().unwrap_or("").to_string();
     let csrf = openclaim_security::tokens::new_token("occ");
-    st.csrf.lock().map_err(|_| fail(OcError::internal("lock")))?.insert(session.clone(), csrf.clone());
-    let mut resp = respond(Envelope::success(env.request_id, env.trace_id, json!({"csrf": csrf, "expires_at": data["expires_at"]})));
+    st.csrf
+        .lock()
+        .map_err(|_| fail(OcError::internal("lock")))?
+        .insert(session.clone(), csrf.clone());
+    let mut resp = respond(Envelope::success(
+        env.request_id,
+        env.trace_id,
+        json!({"csrf": csrf, "expires_at": data["expires_at"]}),
+    ));
     let cookie = format!("{COOKIE}={session}; Path=/; HttpOnly; SameSite=Strict");
     resp.headers_mut().insert(header::SET_COOKIE, HeaderValue::from_str(&cookie).unwrap());
     Ok(resp)
@@ -298,8 +335,15 @@ async fn logout(State(st): State<AppState>, headers: HeaderMap) -> Result<Respon
         st.csrf.lock().map_err(|_| fail(OcError::internal("lock")))?.remove(&session);
         let _ = run(&st, Request::new("owner.lock", Value::Null), &headers, false).await;
     }
-    let mut resp = respond(Envelope::success(openclaim_core::new_request_id(), openclaim_core::new_request_id(), json!({"locked": true})));
-    resp.headers_mut().insert(header::SET_COOKIE, HeaderValue::from_static("oc_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"));
+    let mut resp = respond(Envelope::success(
+        openclaim_core::new_request_id(),
+        openclaim_core::new_request_id(),
+        json!({"locked": true}),
+    ));
+    resp.headers_mut().insert(
+        header::SET_COOKIE,
+        HeaderValue::from_static("oc_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"),
+    );
     Ok(resp)
 }
 
@@ -308,7 +352,8 @@ async fn me(State(st): State<AppState>, headers: HeaderMap) -> Result<Response, 
 }
 
 async fn health(State(st): State<AppState>) -> Response {
-    Json(json!({"ok": true, "product": openclaim_domain::PRODUCT_NAME, "version": openclaim_domain::VERSION, "instance_id": st.svc.inner.instance_id})).into_response()
+    Json(json!({"ok": true, "product": openclaim_domain::PRODUCT_NAME, "version": openclaim_domain::VERSION, "instance_id": st.svc.inner.instance_id}))
+        .into_response()
 }
 
 async fn events(State(st): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
@@ -317,14 +362,21 @@ async fn events(State(st): State<AppState>, headers: HeaderMap) -> Result<Respon
         let svc = st.svc.clone();
         let mut req = Request::new("events.poll", json!({"after_seq": i64::MAX - 1, "limit": 1}));
         req.credentials = creds;
-        tokio::task::spawn_blocking(move || svc.execute(req)).await.map_err(|_| fail(OcError::internal("task")))?
+        tokio::task::spawn_blocking(move || svc.execute(req))
+            .await
+            .map_err(|_| fail(OcError::internal("task")))?
     };
     if let Some(e) = probe.error {
         return Err(fail(e));
     }
     let rx = st.svc.subscribe();
     let stream = tokio_stream::wrappers::BroadcastStream::new(rx).filter_map(|r| r.ok()).map(|ev| {
-        Ok::<_, std::convert::Infallible>(sse::Event::default().event(ev.topic.clone()).id(ev.seq.to_string()).data(serde_json::to_string(&ev).unwrap_or_default()))
+        Ok::<_, std::convert::Infallible>(
+            sse::Event::default()
+                .event(ev.topic.clone())
+                .id(ev.seq.to_string())
+                .data(serde_json::to_string(&ev).unwrap_or_default()),
+        )
     });
     Ok(sse::Sse::new(stream).keep_alive(sse::KeepAlive::default()).into_response())
 }
@@ -337,7 +389,10 @@ async fn spa(State(st): State<AppState>, uri: axum::http::Uri) -> Response {
     };
     let rel = uri.path().trim_start_matches('/');
     let candidate = if rel.is_empty() { dir.join("index.html") } else { dir.join(rel) };
-    let safe = candidate.canonicalize().ok().filter(|c| c.starts_with(dir.canonicalize().unwrap_or_else(|_| dir.clone())));
+    let safe = candidate
+        .canonicalize()
+        .ok()
+        .filter(|c| c.starts_with(dir.canonicalize().unwrap_or_else(|_| dir.clone())));
     let file = match safe {
         Some(f) if f.is_file() => f,
         _ => dir.join("index.html"),

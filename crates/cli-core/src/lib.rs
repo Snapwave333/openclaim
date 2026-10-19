@@ -80,22 +80,102 @@ pub fn build_command() -> Command {
         .about("Free, local-first settlement discovery and claims assistant. No AI inside; agents drive it from outside.")
         .subcommand_required(true)
         .arg_required_else_help(true)
-        .arg(Arg::new("output").long("output").short('o').global(true).value_parser(["table", "text", "json", "ndjson"]).default_value("table").help("Output format"))
-        .arg(Arg::new("fields").long("fields").global(true).help("Comma-separated fields to keep in list output"))
-        .arg(Arg::new("limit").long("limit").global(true).value_parser(clap::value_parser!(u32)).help("Page size"))
+        .arg(
+            Arg::new("output")
+                .long("output")
+                .short('o')
+                .global(true)
+                .value_parser(["table", "text", "json", "ndjson"])
+                .default_value("table")
+                .help("Output format"),
+        )
+        .arg(
+            Arg::new("fields")
+                .long("fields")
+                .global(true)
+                .help("Comma-separated fields to keep in list output"),
+        )
+        .arg(
+            Arg::new("limit")
+                .long("limit")
+                .global(true)
+                .value_parser(clap::value_parser!(u32))
+                .help("Page size"),
+        )
         .arg(Arg::new("cursor").long("cursor").global(true).help("Pagination cursor"))
-        .arg(Arg::new("timeout").long("timeout").global(true).value_parser(clap::value_parser!(u64)).default_value("60").help("Seconds to wait for the daemon"))
-        .arg(Arg::new("offline").long("offline").global(true).action(ArgAction::SetTrue).help("Refuse any network side effect"))
-        .arg(Arg::new("dry-run").long("dry-run").global(true).action(ArgAction::SetTrue).help("Preview without committing"))
+        .arg(
+            Arg::new("timeout")
+                .long("timeout")
+                .global(true)
+                .value_parser(clap::value_parser!(u64))
+                .default_value("60")
+                .help("Seconds to wait for the daemon"),
+        )
+        .arg(
+            Arg::new("offline")
+                .long("offline")
+                .global(true)
+                .action(ArgAction::SetTrue)
+                .help("Refuse any network side effect"),
+        )
+        .arg(
+            Arg::new("dry-run")
+                .long("dry-run")
+                .global(true)
+                .action(ArgAction::SetTrue)
+                .help("Preview without committing"),
+        )
         .arg(Arg::new("request-id").long("request-id").global(true).help("Caller-chosen request id"))
-        .arg(Arg::new("idempotency-key").long("idempotency-key").global(true).help("Safe retries for mutations"))
-        .arg(Arg::new("non-interactive").long("non-interactive").global(true).action(ArgAction::SetTrue).help("Never prompt; return APPROVAL_REQUIRED instead"))
-        .arg(Arg::new("approval").long("approval").global(true).help("Approval id to consume for this action"))
+        .arg(
+            Arg::new("idempotency-key")
+                .long("idempotency-key")
+                .global(true)
+                .help("Safe retries for mutations"),
+        )
+        .arg(
+            Arg::new("non-interactive")
+                .long("non-interactive")
+                .global(true)
+                .action(ArgAction::SetTrue)
+                .help("Never prompt; return APPROVAL_REQUIRED instead"),
+        )
+        .arg(
+            Arg::new("approval")
+                .long("approval")
+                .global(true)
+                .help("Approval id to consume for this action"),
+        )
         .arg(Arg::new("profile").long("profile").global(true).help("Named profile (separate data directory)"))
-        .arg(Arg::new("data-dir").long("data-dir").global(true).help("Data directory (overrides OPENCLAIM_HOME)"))
-        .arg(Arg::new("session").long("session").global(true).env(ENV_SESSION).hide_env_values(true).help("Owner session token"))
-        .arg(Arg::new("agent-token").long("agent-token").global(true).env(ENV_AGENT_TOKEN).hide_env_values(true).help("Registered agent token"))
-        .arg(Arg::new("no-autostart").long("no-autostart").global(true).action(ArgAction::SetTrue).env("OPENCLAIM_NO_AUTOSTART").help("Do not start the daemon automatically"));
+        .arg(
+            Arg::new("data-dir")
+                .long("data-dir")
+                .global(true)
+                .help("Data directory (overrides OPENCLAIM_HOME)"),
+        )
+        .arg(
+            Arg::new("session")
+                .long("session")
+                .global(true)
+                .env(ENV_SESSION)
+                .hide_env_values(true)
+                .help("Owner session token"),
+        )
+        .arg(
+            Arg::new("agent-token")
+                .long("agent-token")
+                .global(true)
+                .env(ENV_AGENT_TOKEN)
+                .hide_env_values(true)
+                .help("Registered agent token"),
+        )
+        .arg(
+            Arg::new("no-autostart")
+                .long("no-autostart")
+                .global(true)
+                .action(ArgAction::SetTrue)
+                .env("OPENCLAIM_NO_AUTOSTART")
+                .help("Do not start the daemon automatically"),
+        );
     for c in spec::COMMANDS.iter().filter(|c| c.group.is_empty()) {
         root = root.subcommand(leaf(c));
     }
@@ -131,7 +211,10 @@ pub fn globals(m: &ArgMatches) -> Globals {
     });
     Globals {
         output: Output::parse(m.get_one::<String>("output").map(String::as_str).unwrap_or("table")).unwrap_or(Output::Table),
-        fields: m.get_one::<String>("fields").map(|f| f.split(',').map(|s| s.trim().to_string()).collect()).unwrap_or_default(),
+        fields: m
+            .get_one::<String>("fields")
+            .map(|f| f.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default(),
         limit: m.get_one::<u32>("limit").copied(),
         cursor: m.get_one::<String>("cursor").cloned(),
         timeout_secs: m.get_one::<u64>("timeout").copied().unwrap_or(60),
@@ -149,7 +232,7 @@ pub fn globals(m: &ArgMatches) -> Globals {
 }
 
 /// Finds the leaf command and its matches.
-pub fn resolve<'a>(m: &'a ArgMatches) -> Option<(&'static CmdSpec, &'a ArgMatches)> {
+pub fn resolve(m: &ArgMatches) -> Option<(&'static CmdSpec, &ArgMatches)> {
     let (first, sub) = m.subcommand()?;
     if let Some(c) = spec::COMMANDS.iter().find(|c| c.group.is_empty() && c.name == first) {
         return Some((c, sub));
@@ -196,7 +279,9 @@ pub fn params_from(c: &CmdSpec, m: &ArgMatches, g: &Globals) -> Result<Value, Oc
                 Some(path) => Some(json!(std::fs::read_to_string(path).map_err(|e| OcError::invalid(format!("read {path}: {e}")))?)),
                 None => None,
             },
-            Kind::List => m.get_one::<String>(a.name).map(|s| json!(s.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect::<Vec<_>>())),
+            Kind::List => m
+                .get_one::<String>(a.name)
+                .map(|s| json!(s.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect::<Vec<_>>())),
             Kind::Multi => m.get_many::<String>(a.name).map(|vals| json!(vals.cloned().collect::<Vec<_>>())),
             Kind::Str => m.get_one::<String>(a.name).map(|s| json!(s)),
         };
@@ -254,7 +339,11 @@ pub fn help_json() -> Value {
 }
 
 pub fn envelope_from_local(data: Value, g: &Globals) -> Envelope {
-    let mut e = Envelope::success(g.request_id.clone().unwrap_or_else(openclaim_core::new_request_id), openclaim_core::new_request_id(), data);
+    let mut e = Envelope::success(
+        g.request_id.clone().unwrap_or_else(openclaim_core::new_request_id),
+        openclaim_core::new_request_id(),
+        data,
+    );
     e.dry_run = g.dry_run;
     e
 }

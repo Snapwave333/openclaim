@@ -8,8 +8,8 @@
 use serde_json::{Value, json};
 
 const INVISIBLE: &[char] = &[
-    '\u{200B}', '\u{200C}', '\u{200D}', '\u{2060}', '\u{FEFF}', '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}',
-    '\u{202E}', '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}', '\u{00AD}',
+    '\u{200B}', '\u{200C}', '\u{200D}', '\u{2060}', '\u{FEFF}', '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}', '\u{2066}', '\u{2067}', '\u{2068}',
+    '\u{2069}', '\u{00AD}',
 ];
 
 pub fn clean_text(input: &str, max_chars: usize) -> String {

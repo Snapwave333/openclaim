@@ -37,13 +37,25 @@ fn main() {
 async fn run(args: Args) -> i32 {
     let paths = Paths::resolve(args.data_dir.clone());
     let _ = std::fs::create_dir_all(&paths.log_dir);
-    let log_file = std::fs::OpenOptions::new().create(true).append(true).open(paths.log_dir.join("openclaimd.log")).ok();
+    let log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(paths.log_dir.join("openclaimd.log"))
+        .ok();
     let filter = tracing_subscriber::EnvFilter::try_from_env("OPENCLAIM_LOG").unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
     match (log_file, args.verbose) {
-        (Some(f), false) => tracing_subscriber::fmt().with_env_filter(filter).with_writer(Arc::new(f)).with_ansi(false).init(),
+        (Some(f), false) => tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_writer(Arc::new(f))
+            .with_ansi(false)
+            .init(),
         (Some(f), true) => {
             let w = Arc::new(f);
-            tracing_subscriber::fmt().with_env_filter(filter).with_writer(move || Tee(w.clone())).with_ansi(false).init();
+            tracing_subscriber::fmt()
+                .with_env_filter(filter)
+                .with_writer(move || Tee(w.clone()))
+                .with_ansi(false)
+                .init();
         }
         (None, _) => tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).init(),
     }
@@ -80,13 +92,25 @@ async fn run(args: Args) -> i32 {
 
     let mut http_port = None;
     if !args.no_http {
-        let port = args.port.unwrap_or_else(|| svc.inner.db.lock().ok().map(|g| openclaim_core::modules::config::get_u64(&g.conn, "gui.port", 7865) as u16).unwrap_or(7865));
+        let port = args.port.unwrap_or_else(|| {
+            svc.inner
+                .db
+                .lock()
+                .ok()
+                .map(|g| openclaim_core::modules::config::get_u64(&g.conn, "gui.port", 7865) as u16)
+                .unwrap_or(7865)
+        });
         let gui_dir = args
             .gui_dir
             .or_else(|| std::env::var_os("OPENCLAIM_GUI_DIR").map(PathBuf::from))
             .or_else(|| std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.join("gui"))))
             .filter(|p| p.join("index.html").is_file());
-        let state = openclaim_api::AppState { svc: svc.clone(), port, gui_dir: gui_dir.clone(), csrf: Default::default() };
+        let state = openclaim_api::AppState {
+            svc: svc.clone(),
+            port,
+            gui_dir: gui_dir.clone(),
+            csrf: Default::default(),
+        };
         let shutdown = {
             let svc = svc.clone();
             async move { svc.inner.shutdown.notified().await }

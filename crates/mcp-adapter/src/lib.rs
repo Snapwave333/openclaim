@@ -106,7 +106,11 @@ impl Server {
         let result: Result<Value, (i64, String)> = match method {
             "initialize" => {
                 let requested = params["protocolVersion"].as_str().unwrap_or("");
-                let version = if SUPPORTED_PROTOCOLS.contains(&requested) { requested } else { SUPPORTED_PROTOCOLS[0] };
+                let version = if SUPPORTED_PROTOCOLS.contains(&requested) {
+                    requested
+                } else {
+                    SUPPORTED_PROTOCOLS[0]
+                };
                 Ok(json!({
                     "protocolVersion": version,
                     "capabilities": {"tools": {"listChanged": false}, "resources": {"subscribe": false, "listChanged": false}, "prompts": {"listChanged": false}},
@@ -147,7 +151,10 @@ impl Server {
                         if args.is_null() {
                             args = json!({});
                         }
-                        let approval = args.as_object_mut().and_then(|o| o.remove("approval_id")).and_then(|v| v.as_str().map(str::to_string));
+                        let approval = args
+                            .as_object_mut()
+                            .and_then(|o| o.remove("approval_id"))
+                            .and_then(|v| v.as_str().map(str::to_string));
                         let env = self.call_op(op.name, args, approval).await;
                         let is_error = !env.ok;
                         let structured = json!({
@@ -176,7 +183,11 @@ impl Server {
 
 /// Serves MCP over stdin/stdout until EOF.
 pub async fn serve_stdio(client: Client, token: Option<String>) -> Result<(), String> {
-    let mut server = Server { client, token, initialized: false };
+    let mut server = Server {
+        client,
+        token,
+        initialized: false,
+    };
     let stdin = tokio::io::stdin();
     let mut stdout = tokio::io::stdout();
     let mut reader = BufReader::new(stdin);
@@ -210,7 +221,26 @@ pub async fn serve_stdio(client: Client, token: Option<String>) -> Result<(), St
 pub fn self_test() -> Value {
     let tools = tool_list();
     let names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
-    let required = ["discover_opportunities", "get_opportunity", "get_opportunity_rules", "compare_opportunities", "evaluate_match", "list_document_metadata", "read_document_excerpt", "propose_fact", "get_claim_checklist", "prepare_claim_draft", "get_claim_status", "refresh_source", "get_job", "watch_job", "list_alerts", "request_approval", "get_approval_status", "get_source_health"];
+    let required = [
+        "discover_opportunities",
+        "get_opportunity",
+        "get_opportunity_rules",
+        "compare_opportunities",
+        "evaluate_match",
+        "list_document_metadata",
+        "read_document_excerpt",
+        "propose_fact",
+        "get_claim_checklist",
+        "prepare_claim_draft",
+        "get_claim_status",
+        "refresh_source",
+        "get_job",
+        "watch_job",
+        "list_alerts",
+        "request_approval",
+        "get_approval_status",
+        "get_source_health",
+    ];
     let missing: Vec<&str> = required.iter().copied().filter(|r| !names.contains(r)).collect();
     let forbidden: Vec<&str> = names.iter().copied().filter(|n| n.contains("submit")).collect();
     json!({"ok": missing.is_empty() && forbidden.is_empty(), "tools": names.len(), "missing": missing, "forbidden_present": forbidden, "protocols": SUPPORTED_PROTOCOLS, "error_code_for_approval": ErrorCode::ApprovalRequired.as_str()})

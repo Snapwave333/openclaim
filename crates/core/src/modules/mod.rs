@@ -54,7 +54,11 @@ impl Pager {
                 let (offset, snapshot) = crate::sql::decode_cursor(c)?;
                 Ok(Pager { limit, offset, snapshot })
             }
-            _ => Ok(Pager { limit, offset: 0, snapshot: now.to_string() }),
+            _ => Ok(Pager {
+                limit,
+                offset: 0,
+                snapshot: now.to_string(),
+            }),
         }
     }
 
@@ -82,12 +86,17 @@ pub fn parse_params<T: serde::de::DeserializeOwned>(v: Value) -> OcResult<T> {
 pub fn bump_version(conn: &openclaim_db::rusqlite::Connection, table: &str, id: &str, expected: Option<i64>, now: &str) -> OcResult<i64> {
     let current: Option<i64> = crate::sql::scalar(conn, &format!("SELECT version FROM {table} WHERE id = ?1"), [id])?;
     let current = current.ok_or_else(|| OcError::not_found(format!("{} '{id}' not found", table.trim_end_matches('s'))))?;
-    if let Some(e) = expected {
-        if e != current {
-            return Err(OcError::conflict(format!("stale version: expected {e}, current {current}")).with_next_action("re-read the record and retry with the current version"));
-        }
+    if let Some(e) = expected
+        && e != current
+    {
+        return Err(OcError::conflict(format!("stale version: expected {e}, current {current}"))
+            .with_next_action("re-read the record and retry with the current version"));
     }
-    crate::sql::exec(conn, &format!("UPDATE {table} SET version = version + 1, updated_at = ?2 WHERE id = ?1"), (id, now))?;
+    crate::sql::exec(
+        conn,
+        &format!("UPDATE {table} SET version = version + 1, updated_at = ?2 WHERE id = ?1"),
+        (id, now),
+    )?;
     Ok(current + 1)
 }
 

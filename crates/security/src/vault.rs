@@ -31,7 +31,9 @@ impl std::fmt::Display for VaultError {
 
 impl VaultKey {
     pub fn from_bytes(key: [u8; 32]) -> Self {
-        VaultKey { cipher: XChaCha20Poly1305::new((&key).into()) }
+        VaultKey {
+            cipher: XChaCha20Poly1305::new((&key).into()),
+        }
     }
 
     /// Loads the key from `dir`, creating and protecting a new one on first run.
@@ -136,20 +138,40 @@ fn unprotect(data: &[u8]) -> Result<Vec<u8>, VaultError> {
 mod dpapi {
     use super::VaultError;
     use windows_sys::Win32::Foundation::{HLOCAL, LocalFree};
-    use windows_sys::Win32::Security::Cryptography::{
-        CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
-    };
+    use windows_sys::Win32::Security::Cryptography::{CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData};
 
     fn call(data: &[u8], protect: bool) -> Result<Vec<u8>, VaultError> {
-        let input = CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 };
-        let mut output = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+        let input = CRYPT_INTEGER_BLOB {
+            cbData: data.len() as u32,
+            pbData: data.as_ptr() as *mut u8,
+        };
+        let mut output = CRYPT_INTEGER_BLOB {
+            cbData: 0,
+            pbData: std::ptr::null_mut(),
+        };
         // SAFETY: input points to `data` for the duration of the call; output is allocated by
         // the OS with LocalAlloc and freed below after copying.
         let ok = unsafe {
             if protect {
-                CryptProtectData(&input, std::ptr::null(), std::ptr::null(), std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut output)
+                CryptProtectData(
+                    &input,
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    CRYPTPROTECT_UI_FORBIDDEN,
+                    &mut output,
+                )
             } else {
-                CryptUnprotectData(&input, std::ptr::null_mut(), std::ptr::null(), std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut output)
+                CryptUnprotectData(
+                    &input,
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    CRYPTPROTECT_UI_FORBIDDEN,
+                    &mut output,
+                )
             }
         };
         if ok == 0 {

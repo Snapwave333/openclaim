@@ -14,12 +14,20 @@ pub struct Event {
 /// Writes to the transactional outbox. The dispatcher broadcasts after commit.
 pub fn emit(conn: &Connection, topic: &str, payload: Value) -> OcResult<i64> {
     let at = openclaim_domain::dates::now_rfc3339();
-    crate::sql::exec(conn, "INSERT INTO events(topic, payload, at) VALUES (?1, ?2, ?3)", (topic, payload.to_string(), &at))?;
+    crate::sql::exec(
+        conn,
+        "INSERT INTO events(topic, payload, at) VALUES (?1, ?2, ?3)",
+        (topic, payload.to_string(), &at),
+    )?;
     Ok(conn.last_insert_rowid())
 }
 
 pub fn since(conn: &Connection, after_seq: i64, limit: u32) -> OcResult<Vec<Event>> {
-    let rows = crate::sql::query_all(conn, "SELECT seq, topic, payload, at FROM events WHERE seq > ?1 ORDER BY seq LIMIT ?2", (after_seq, limit))?;
+    let rows = crate::sql::query_all(
+        conn,
+        "SELECT seq, topic, payload, at FROM events WHERE seq > ?1 ORDER BY seq LIMIT ?2",
+        (after_seq, limit),
+    )?;
     Ok(rows
         .into_iter()
         .map(|r| Event {

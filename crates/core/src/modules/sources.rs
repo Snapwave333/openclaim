@@ -27,11 +27,23 @@ pub fn seed(conn: &Connection) -> OcResult<()> {
                     conn,
                     "INSERT INTO sources(id, name, url, connector, authority_tier, manifest_json, enabled, health, created_at)
                      VALUES (?1,?2,?3,?4,?5,?6,1,'never_fetched',?7)",
-                    (&m.id, &m.name, &m.url, serde_json::to_value(m.connector)?.as_str().unwrap_or(""), m.authority_tier.as_str(), &manifest_json, &now),
+                    (
+                        &m.id,
+                        &m.name,
+                        &m.url,
+                        serde_json::to_value(m.connector)?.as_str().unwrap_or(""),
+                        m.authority_tier.as_str(),
+                        &manifest_json,
+                        &now,
+                    ),
                 )?;
             }
             Some(old) if old != manifest_json => {
-                exec(conn, "UPDATE sources SET name = ?2, url = ?3, manifest_json = ?4 WHERE id = ?1", (&m.id, &m.name, &m.url, &manifest_json))?;
+                exec(
+                    conn,
+                    "UPDATE sources SET name = ?2, url = ?3, manifest_json = ?4 WHERE id = ?1",
+                    (&m.id, &m.name, &m.url, &manifest_json),
+                )?;
             }
             _ => {}
         }
@@ -48,22 +60,46 @@ pub fn recheck_configuration(conn: &Connection, _now: &str) -> OcResult<()> {
         let needs = m.auth_requirement == AuthRequirement::DeclaredContactUserAgent && contact.is_none();
         let health = row["health"].as_str().unwrap_or("");
         if needs && health != "needs_configuration" {
-            exec(conn, "UPDATE sources SET health = 'needs_configuration', last_failure = 'policy_blocked', last_failure_detail = 'set network.contact first' WHERE id = ?1", [id])?;
+            exec(
+                conn,
+                "UPDATE sources SET health = 'needs_configuration', last_failure = 'policy_blocked', last_failure_detail = 'set network.contact first' WHERE id = ?1",
+                [id],
+            )?;
         } else if !needs && health == "needs_configuration" {
-            exec(conn, "UPDATE sources SET health = 'never_fetched', last_failure = NULL, last_failure_detail = NULL WHERE id = ?1", [id])?;
+            exec(
+                conn,
+                "UPDATE sources SET health = 'never_fetched', last_failure = NULL, last_failure_detail = NULL WHERE id = ?1",
+                [id],
+            )?;
         }
     }
     Ok(())
 }
 
 pub fn manifest_of(conn: &Connection, source_id: &str) -> OcResult<ConnectorManifest> {
-    let row = require(query_one(conn, "SELECT manifest_json FROM sources WHERE id = ?1", [source_id])?, "source", source_id)?;
+    let row = require(
+        query_one(conn, "SELECT manifest_json FROM sources WHERE id = ?1", [source_id])?,
+        "source",
+        source_id,
+    )?;
     Ok(serde_json::from_value(row["manifest"].clone())?)
 }
 
-pub fn record_snapshot(conn: &Connection, source_id: &str, url: &str, body: &str, acquisition: &str, status: Option<u16>, now: &str) -> OcResult<(String, bool)> {
+pub fn record_snapshot(
+    conn: &Connection,
+    source_id: &str,
+    url: &str,
+    body: &str,
+    acquisition: &str,
+    status: Option<u16>,
+    now: &str,
+) -> OcResult<(String, bool)> {
     let hash = sha256_hex(body.as_bytes());
-    let prev: Option<String> = scalar(conn, "SELECT content_hash FROM source_snapshots WHERE source_id = ?1 AND url = ?2 ORDER BY fetched_at DESC LIMIT 1", (source_id, url))?;
+    let prev: Option<String> = scalar(
+        conn,
+        "SELECT content_hash FROM source_snapshots WHERE source_id = ?1 AND url = ?2 ORDER BY fetched_at DESC LIMIT 1",
+        (source_id, url),
+    )?;
     let changed = prev.as_deref() != Some(&hash);
     let id = openclaim_db::new_id();
     let excerpt = openclaim_security::sanitize::clean_text(&openclaim_security::sanitize::html_fragment_to_text(body), 600);
@@ -71,7 +107,22 @@ pub fn record_snapshot(conn: &Connection, source_id: &str, url: &str, body: &str
         conn,
         "INSERT INTO source_snapshots(id, source_id, url, content_hash, fetched_at, acquisition, http_status, change_summary, parser_version, excerpt)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
-        (&id, source_id, url, &hash, now, acquisition, status.map(|s| s as i64), if changed { if prev.is_some() { "content changed" } else { "first capture" } } else { "unchanged" }, openclaim_discovery::parse::PARSER_VERSION, excerpt),
+        (
+            &id,
+            source_id,
+            url,
+            &hash,
+            now,
+            acquisition,
+            status.map(|s| s as i64),
+            if changed {
+                if prev.is_some() { "content changed" } else { "first capture" }
+            } else {
+                "unchanged"
+            },
+            openclaim_discovery::parse::PARSER_VERSION,
+            excerpt,
+        ),
     )?;
     Ok((id, changed))
 }
@@ -86,13 +137,42 @@ pub struct IngestSummary {
     pub tips: u32,
 }
 
-const WATCHED_FIELDS: &[&str] = &["status", "claim_deadline", "claim_url", "official_url", "title", "summary", "class_period_start", "class_period_end", "administrator", "verification_state"];
+const WATCHED_FIELDS: &[&str] = &[
+    "status",
+    "claim_deadline",
+    "claim_url",
+    "official_url",
+    "title",
+    "summary",
+    "class_period_start",
+    "class_period_end",
+    "administrator",
+    "verification_state",
+];
 
-pub fn ingest(conn: &Connection, source_id: &str, snapshot_id: &str, tier: AuthorityTier, records: &[ParsedOpportunity], programs: &[ParsedProgram], tips: &[ParsedTip], now: &str) -> OcResult<IngestSummary> {
+#[allow(clippy::too_many_arguments)]
+pub fn ingest(
+    conn: &Connection,
+    source_id: &str,
+    snapshot_id: &str,
+    tier: AuthorityTier,
+    records: &[ParsedOpportunity],
+    programs: &[ParsedProgram],
+    tips: &[ParsedTip],
+    now: &str,
+) -> OcResult<IngestSummary> {
     let mut s = IngestSummary::default();
     for r in records {
-        let existing = query_one(conn, "SELECT id FROM opportunities WHERE source_id = ?1 AND external_key = ?2", (source_id, &r.external_key))?
-            .or(query_one(conn, "SELECT opportunity_id AS id FROM opportunity_aliases WHERE source_id = ?1 AND external_key = ?2", (source_id, &r.external_key))?);
+        let existing = query_one(
+            conn,
+            "SELECT id FROM opportunities WHERE source_id = ?1 AND external_key = ?2",
+            (source_id, &r.external_key),
+        )?
+        .or(query_one(
+            conn,
+            "SELECT opportunity_id AS id FROM opportunity_aliases WHERE source_id = ?1 AND external_key = ?2",
+            (source_id, &r.external_key),
+        )?);
         let key = dedupe_key(&r.title, r.case_number.as_deref(), r.administrator.as_deref(), r.class_period_start.as_deref());
         if let Some(ex) = existing {
             let id = ex["id"].as_str().unwrap_or("").to_string();
@@ -102,10 +182,22 @@ pub fn ingest(conn: &Connection, source_id: &str, snapshot_id: &str, tier: Autho
             continue;
         }
         let title_part = key.split('|').next().unwrap_or("").to_string();
-        let candidates = if title_part.is_empty() { Vec::new() } else { query_all(conn, "SELECT id, dedupe_key FROM opportunities WHERE dedupe_key LIKE ?1 ESCAPE '\\' AND archived_at IS NULL", [format!("{}|%", title_part.replace('%', "\\%").replace('_', "\\_"))])? };
+        let candidates = if title_part.is_empty() {
+            Vec::new()
+        } else {
+            query_all(
+                conn,
+                "SELECT id, dedupe_key FROM opportunities WHERE dedupe_key LIKE ?1 ESCAPE '\\' AND archived_at IS NULL",
+                [format!("{}|%", title_part.replace('%', "\\%").replace('_', "\\_"))],
+            )?
+        };
         if let Some(c) = candidates.iter().find(|c| same_settlement(c["dedupe_key"].as_str().unwrap_or(""), &key)) {
             let id = c["id"].as_str().unwrap_or("").to_string();
-            exec(conn, "INSERT OR IGNORE INTO opportunity_aliases(opportunity_id, source_id, external_key, title) VALUES (?1,?2,?3,?4)", (&id, source_id, &r.external_key, &r.title))?;
+            exec(
+                conn,
+                "INSERT OR IGNORE INTO opportunity_aliases(opportunity_id, source_id, external_key, title) VALUES (?1,?2,?3,?4)",
+                (&id, source_id, &r.external_key, &r.title),
+            )?;
             let changed = update_opportunity(conn, &id, r, tier, snapshot_id, now)?;
             s.changes += changed;
             s.merged += 1;
@@ -127,7 +219,11 @@ pub fn ingest(conn: &Connection, source_id: &str, snapshot_id: &str, tier: Autho
     for t in tips {
         let exists: Option<String> = scalar(conn, "SELECT id FROM tips WHERE url = ?1", [&t.url])?;
         if exists.is_none() {
-            exec(conn, "INSERT INTO tips(id, url, title, note, submitted_by, state, created_at) VALUES (?1,?2,?3,?4,?5,'quarantined',?6)", (openclaim_db::new_id(), &t.url, &t.title, t.summary.clone(), format!("source:{source_id}"), now))?;
+            exec(
+                conn,
+                "INSERT INTO tips(id, url, title, note, submitted_by, state, created_at) VALUES (?1,?2,?3,?4,?5,'quarantined',?6)",
+                (openclaim_db::new_id(), &t.url, &t.title, t.summary.clone(), format!("source:{source_id}"), now),
+            )?;
             s.tips += 1;
         }
     }
@@ -135,10 +231,22 @@ pub fn ingest(conn: &Connection, source_id: &str, snapshot_id: &str, tier: Autho
 }
 
 fn verification_for(tier: AuthorityTier, terms_confirmed: bool) -> VerificationState {
-    if tier == AuthorityTier::A && terms_confirmed { VerificationState::Verified } else { VerificationState::VerificationPending }
+    if tier == AuthorityTier::A && terms_confirmed {
+        VerificationState::Verified
+    } else {
+        VerificationState::VerificationPending
+    }
 }
 
-fn insert_opportunity(conn: &Connection, source_id: &str, r: &ParsedOpportunity, tier: AuthorityTier, key: &str, snapshot_id: &str, now: &str) -> OcResult<String> {
+fn insert_opportunity(
+    conn: &Connection,
+    source_id: &str,
+    r: &ParsedOpportunity,
+    tier: AuthorityTier,
+    key: &str,
+    snapshot_id: &str,
+    now: &str,
+) -> OcResult<String> {
     let id = openclaim_db::new_id();
     let vs = verification_for(tier, r.terms_confirmed);
     exec(
@@ -156,7 +264,11 @@ fn insert_opportunity(conn: &Connection, source_id: &str, r: &ParsedOpportunity,
     )?;
     reindex(conn, &id)?;
     add_evidence(conn, &id, snapshot_id, r, now)?;
-    crate::events::emit(conn, "opportunity.new", json!({"opportunity_id": id, "title": r.title, "verification_state": vs.as_str()}))?;
+    crate::events::emit(
+        conn,
+        "opportunity.new",
+        json!({"opportunity_id": id, "title": r.title, "verification_state": vs.as_str()}),
+    )?;
     Ok(id)
 }
 
@@ -164,7 +276,13 @@ fn insert_opportunity(conn: &Connection, source_id: &str, r: &ParsedOpportunity,
 fn update_opportunity(conn: &Connection, id: &str, r: &ParsedOpportunity, tier: AuthorityTier, snapshot_id: &str, now: &str) -> OcResult<u32> {
     let before = require(query_one(conn, "SELECT * FROM opportunities WHERE id = ?1", [id])?, "opportunity", id)?;
     let was_verified = before["verification_state"] == "verified";
-    let vs = if r.terms_confirmed { verification_for(tier, true) } else if was_verified { VerificationState::Verified } else { VerificationState::VerificationPending };
+    let vs = if r.terms_confirmed {
+        verification_for(tier, true)
+    } else if was_verified {
+        VerificationState::Verified
+    } else {
+        VerificationState::VerificationPending
+    };
     if r.terms_confirmed {
         exec(
             conn,
@@ -210,7 +328,13 @@ fn update_opportunity(conn: &Connection, id: &str, r: &ParsedOpportunity, tier: 
         reindex(conn, id)?;
         crate::events::emit(conn, "opportunity.changed", json!({"opportunity_id": id, "title": r.title, "changes": changes}))?;
         if before["claim_deadline"] != after["claim_deadline"] || before["status"] != after["status"] {
-            crate::modules::alerts::change_alert(conn, id, &r.title, &format!("Official terms changed: {}", changed_fields(&before, &after).join(", ")), now)?;
+            crate::modules::alerts::change_alert(
+                conn,
+                id,
+                &r.title,
+                &format!("Official terms changed: {}", changed_fields(&before, &after).join(", ")),
+                now,
+            )?;
         }
     }
     add_evidence(conn, id, snapshot_id, r, now)?;
@@ -234,19 +358,37 @@ fn add_evidence(conn: &Connection, id: &str, snapshot_id: &str, r: &ParsedOpport
         exec(
             conn,
             "INSERT INTO evidence_links(id, opportunity_id, source_snapshot_id, precise_locator, assertion_type, excerpt, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-            (openclaim_db::new_id(), id, snapshot_id, &e.locator, &e.assertion_type, openclaim_security::sanitize::clean_text(&e.excerpt, 1000), now),
+            (
+                openclaim_db::new_id(),
+                id,
+                snapshot_id,
+                &e.locator,
+                &e.assertion_type,
+                openclaim_security::sanitize::clean_text(&e.excerpt, 1000),
+                now,
+            ),
         )?;
     }
     Ok(())
 }
 
 pub fn reindex(conn: &Connection, id: &str) -> OcResult<()> {
-    let row = require(query_one(conn, "SELECT title, administrator, summary, case_number FROM opportunities WHERE id = ?1", [id])?, "opportunity", id)?;
+    let row = require(
+        query_one(conn, "SELECT title, administrator, summary, case_number FROM opportunities WHERE id = ?1", [id])?,
+        "opportunity",
+        id,
+    )?;
     exec(conn, "DELETE FROM opportunities_fts WHERE opportunity_id = ?1", [id])?;
     exec(
         conn,
         "INSERT INTO opportunities_fts(opportunity_id, title, administrator, summary, case_number) VALUES (?1,?2,?3,?4,?5)",
-        (id, row["title"].as_str().unwrap_or(""), row["administrator"].as_str().unwrap_or(""), row["summary"].as_str().unwrap_or(""), row["case_number"].as_str().unwrap_or("")),
+        (
+            id,
+            row["title"].as_str().unwrap_or(""),
+            row["administrator"].as_str().unwrap_or(""),
+            row["summary"].as_str().unwrap_or(""),
+            row["case_number"].as_str().unwrap_or(""),
+        ),
     )?;
     Ok(())
 }
@@ -264,7 +406,11 @@ pub fn mark_stale(conn: &Connection, now: &str) -> OcResult<u32> {
             None => true,
         };
         if stale {
-            n += exec(conn, "UPDATE opportunities SET verification_state = 'stale', updated_at = ?2 WHERE source_id = ?1 AND verification_state = 'verified' AND verified_at < ?3", (id, now, openclaim_domain::dates::format_ts(limit)))? as u32;
+            n += exec(
+                conn,
+                "UPDATE opportunities SET verification_state = 'stale', updated_at = ?2 WHERE source_id = ?1 AND verification_state = 'verified' AND verified_at < ?3",
+                (id, now, openclaim_domain::dates::format_ts(limit)),
+            )? as u32;
         }
     }
     Ok(n)
@@ -285,7 +431,11 @@ pub fn record_failure(conn: &Connection, source_id: &str, class: FetchFailure, d
         "UPDATE sources SET health = ?2, last_failure = ?3, last_failure_detail = ?4, consecutive_failures = ?5, last_attempt_at = ?6, next_fetch_at = ?7 WHERE id = ?1",
         (source_id, health.as_str(), class.as_str(), detail, failures, now, next),
     )?;
-    crate::events::emit(conn, "source.failed", json!({"source_id": source_id, "class": class.as_str(), "detail": detail}))?;
+    crate::events::emit(
+        conn,
+        "source.failed",
+        json!({"source_id": source_id, "class": class.as_str(), "detail": detail}),
+    )?;
     Ok(())
 }
 
@@ -341,21 +491,50 @@ fn source_view(row: Value) -> Value {
 }
 
 fn op_list(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
-    let rows = query_all(ctx.conn, "SELECT id, name, url, connector, authority_tier, trust_status, enabled, disabled_reason, health, last_failure, last_failure_detail, consecutive_failures, next_fetch_at, last_attempt_at, last_ok_at, created_at, version FROM sources ORDER BY authority_tier, id", [])?;
+    let mut rows = query_all(
+        ctx.conn,
+        "SELECT id, name, url, connector, authority_tier, trust_status, enabled, disabled_reason, health, last_failure, last_failure_detail, consecutive_failures, next_fetch_at, last_attempt_at, last_ok_at, created_at, version, manifest_json FROM sources ORDER BY authority_tier, id",
+        [],
+    )?;
+    for r in &mut rows {
+        let hosts = r["manifest"]["allowed_hosts"].clone();
+        let automation = r["manifest"]["automation_allowed"].clone();
+        if let Some(o) = r.as_object_mut() {
+            o.remove("manifest");
+            o.insert("allowed_hosts".into(), hosts);
+            o.insert("automation_allowed".into(), automation);
+        }
+    }
     Ok(json!({"items": rows}))
 }
 
 fn op_show(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: SourceIdParam = parse_params(p)?;
-    let row = require(query_one(ctx.conn, "SELECT * FROM sources WHERE id = ?1", [&p.source_id])?, "source", &p.source_id)?;
+    let row = require(
+        query_one(ctx.conn, "SELECT * FROM sources WHERE id = ?1", [&p.source_id])?,
+        "source",
+        &p.source_id,
+    )?;
     let manifest = row["manifest"].clone();
-    let counts = query_one(ctx.conn, "SELECT count(*) AS opportunities, sum(CASE WHEN verification_state='verified' THEN 1 ELSE 0 END) AS verified FROM opportunities WHERE source_id = ?1", [&p.source_id])?;
-    let last_snapshot = query_one(ctx.conn, "SELECT id, url, fetched_at, acquisition, http_status, change_summary FROM source_snapshots WHERE source_id = ?1 ORDER BY fetched_at DESC LIMIT 1", [&p.source_id])?;
+    let counts = query_one(
+        ctx.conn,
+        "SELECT count(*) AS opportunities, sum(CASE WHEN verification_state='verified' THEN 1 ELSE 0 END) AS verified FROM opportunities WHERE source_id = ?1",
+        [&p.source_id],
+    )?;
+    let last_snapshot = query_one(
+        ctx.conn,
+        "SELECT id, url, fetched_at, acquisition, http_status, change_summary FROM source_snapshots WHERE source_id = ?1 ORDER BY fetched_at DESC LIMIT 1",
+        [&p.source_id],
+    )?;
     Ok(json!({"source": source_view(row), "manifest": manifest, "counts": counts, "last_snapshot": last_snapshot}))
 }
 
 fn op_health(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
-    let rows = query_all(ctx.conn, "SELECT id, name, health, enabled, last_ok_at, next_fetch_at, last_failure, last_failure_detail, consecutive_failures FROM sources ORDER BY id", [])?;
+    let rows = query_all(
+        ctx.conn,
+        "SELECT id, name, health, enabled, last_ok_at, next_fetch_at, last_failure, last_failure_detail, consecutive_failures FROM sources ORDER BY id",
+        [],
+    )?;
     let stale: i64 = scalar(ctx.conn, "SELECT count(*) FROM opportunities WHERE verification_state = 'stale'", [])?.unwrap_or(0);
     Ok(json!({"items": rows, "stale_opportunities": stale, "note": "Blocked or degraded sources mean coverage gaps, not an absence of settlements."}))
 }
@@ -370,13 +549,23 @@ fn op_refresh(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
             require(scalar::<String, _>(ctx.conn, "SELECT id FROM sources WHERE id = ?1", [id])?, "source", id)?;
             vec![id.clone()]
         }
-        (None, Some("all")) => query_all(ctx.conn, "SELECT id FROM sources WHERE enabled = 1", [])?.into_iter().filter_map(|r| r["id"].as_str().map(str::to_string)).collect(),
-        _ => query_all(ctx.conn, "SELECT id FROM sources WHERE enabled = 1 AND authority_tier = 'A'", [])?.into_iter().filter_map(|r| r["id"].as_str().map(str::to_string)).collect(),
+        (None, Some("all")) => query_all(ctx.conn, "SELECT id FROM sources WHERE enabled = 1", [])?
+            .into_iter()
+            .filter_map(|r| r["id"].as_str().map(str::to_string))
+            .collect(),
+        _ => query_all(ctx.conn, "SELECT id FROM sources WHERE enabled = 1 AND authority_tier = 'A'", [])?
+            .into_iter()
+            .filter_map(|r| r["id"].as_str().map(str::to_string))
+            .collect(),
     };
     let mut jobs = Vec::new();
     let mut skipped = Vec::new();
     for id in ids {
-        let row = require(query_one(ctx.conn, "SELECT enabled, health, next_fetch_at FROM sources WHERE id = ?1", [&id])?, "source", &id)?;
+        let row = require(
+            query_one(ctx.conn, "SELECT enabled, health, next_fetch_at FROM sources WHERE id = ?1", [&id])?,
+            "source",
+            &id,
+        )?;
         if row["enabled"] != true {
             skipped.push(json!({"source_id": id, "reason": "disabled"}));
             continue;
@@ -385,18 +574,19 @@ fn op_refresh(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
             skipped.push(json!({"source_id": id, "reason": "needs_configuration: set network.contact"}));
             continue;
         }
-        if !p.force {
-            if let Some(next) = row["next_fetch_at"].as_str() {
-                if next > ctx.now.as_str() {
-                    skipped.push(json!({"source_id": id, "reason": format!("fresh until {next}; use force=true to fetch now")}));
-                    continue;
-                }
-            }
+        if !p.force
+            && let Some(next) = row["next_fetch_at"].as_str()
+            && next > ctx.now.as_str()
+        {
+            skipped.push(json!({"source_id": id, "reason": format!("fresh until {next}; use force=true to fetch now")}));
+            continue;
         }
         let job_id = crate::jobs::enqueue(ctx, "source_refresh", json!({"source_id": id, "force": p.force}), None)?;
         jobs.push(json!({"source_id": id, "job_id": job_id, "status": "queued"}));
     }
-    Ok(json!({"jobs": jobs, "skipped": skipped, "job_id": jobs.first().and_then(|j| j["job_id"].as_str()), "status": if jobs.is_empty() { "nothing_queued" } else { "queued" }}))
+    Ok(
+        json!({"jobs": jobs, "skipped": skipped, "job_id": jobs.first().and_then(|j| j["job_id"].as_str()), "status": if jobs.is_empty() { "nothing_queued" } else { "queued" }}),
+    )
 }
 
 fn op_test(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
@@ -431,7 +621,11 @@ fn op_register(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     if m.authority_tier == AuthorityTier::A && !openclaim_discovery::manifest::bundled().iter().any(|b| b.id == m.id) {
         ctx.warn("user-registered sources are stored as Tier B leads until reviewed; records from them stay verification_pending");
     }
-    let tier = if openclaim_discovery::manifest::bundled().iter().any(|b| b.id == m.id) { m.authority_tier } else { AuthorityTier::B };
+    let tier = if openclaim_discovery::manifest::bundled().iter().any(|b| b.id == m.id) {
+        m.authority_tier
+    } else {
+        AuthorityTier::B
+    };
     exec(
         ctx.conn,
         "INSERT INTO sources(id, name, url, connector, authority_tier, trust_status, manifest_json, enabled, health, created_at) VALUES (?1,?2,?3,?4,?5,'user_registered',?6,1,'never_fetched',?7)
@@ -451,7 +645,11 @@ pub struct DisableParams {
 
 fn op_disable(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: DisableParams = parse_params(p)?;
-    let n = exec(ctx.conn, "UPDATE sources SET enabled = 0, disabled_reason = ?2, health = 'disabled', version = version + 1 WHERE id = ?1", (&p.source_id, p.reason.clone().unwrap_or_else(|| "disabled by owner".into())))?;
+    let n = exec(
+        ctx.conn,
+        "UPDATE sources SET enabled = 0, disabled_reason = ?2, health = 'disabled', version = version + 1 WHERE id = ?1",
+        (&p.source_id, p.reason.clone().unwrap_or_else(|| "disabled by owner".into())),
+    )?;
     if n == 0 {
         return Err(OcError::not_found(format!("source '{}' not found", p.source_id)));
     }
@@ -461,7 +659,11 @@ fn op_disable(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
 fn op_enable(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: SourceIdParam = parse_params(p)?;
     manifest_of(ctx.conn, &p.source_id)?;
-    exec(ctx.conn, "UPDATE sources SET enabled = 1, disabled_reason = NULL, health = 'never_fetched', version = version + 1 WHERE id = ?1", [&p.source_id])?;
+    exec(
+        ctx.conn,
+        "UPDATE sources SET enabled = 1, disabled_reason = NULL, health = 'never_fetched', version = version + 1 WHERE id = ?1",
+        [&p.source_id],
+    )?;
     recheck_configuration(ctx.conn, &ctx.now)?;
     Ok(json!({"source_id": p.source_id, "enabled": true}))
 }
@@ -476,7 +678,14 @@ pub struct HistoryParams {
 fn op_history(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: HistoryParams = parse_params(p)?;
     let pager = Pager::from(&p.page, &ctx.now)?;
-    let rows = query_all(ctx.conn, &format!("SELECT id, url, content_hash, fetched_at, acquisition, http_status, change_summary, parser_version FROM source_snapshots WHERE source_id = ?1 AND fetched_at <= ?2 ORDER BY fetched_at DESC{}", pager.sql_limit()), (&p.source_id, &pager.snapshot))?;
+    let rows = query_all(
+        ctx.conn,
+        &format!(
+            "SELECT id, url, content_hash, fetched_at, acquisition, http_status, change_summary, parser_version FROM source_snapshots WHERE source_id = ?1 AND fetched_at <= ?2 ORDER BY fetched_at DESC{}",
+            pager.sql_limit()
+        ),
+        (&p.source_id, &pager.snapshot),
+    )?;
     Ok(pager.wrap(rows, None))
 }
 
@@ -512,9 +721,19 @@ pub fn import_snapshot(ctx: &mut Ctx<'_>, p: ImportSnapshotParams, acquisition: 
     let (opps, programs, tips) = openclaim_discovery::run::parse_page(m.connector, &p.url, &html, today).map_err(OcError::invalid)?;
     let (snapshot_id, _changed) = record_snapshot(ctx.conn, &p.source_id, &p.url, &html, acquisition, None, &ctx.now)?;
     let summary = ingest(ctx.conn, &p.source_id, &snapshot_id, m.authority_tier, &opps, &programs, &tips, &ctx.now)?;
-    exec(ctx.conn, "UPDATE sources SET last_ok_at = ?2 WHERE id = ?1 AND health IN ('blocked','never_fetched','degraded')", (&p.source_id, &ctx.now))?;
-    ctx.audit("sources.import_snapshot", &p.source_id, json!({"url": p.url, "acquisition": acquisition, "records": opps.len()}))?;
-    Ok(json!({"snapshot_id": snapshot_id, "parsed": opps.len(), "programs": programs.len(), "tips": tips.len(), "summary": summary, "acquisition": acquisition}))
+    exec(
+        ctx.conn,
+        "UPDATE sources SET last_ok_at = ?2 WHERE id = ?1 AND health IN ('blocked','never_fetched','degraded')",
+        (&p.source_id, &ctx.now),
+    )?;
+    ctx.audit(
+        "sources.import_snapshot",
+        &p.source_id,
+        json!({"url": p.url, "acquisition": acquisition, "records": opps.len()}),
+    )?;
+    Ok(
+        json!({"snapshot_id": snapshot_id, "parsed": opps.len(), "programs": programs.len(), "tips": tips.len(), "summary": summary, "acquisition": acquisition}),
+    )
 }
 
 fn op_import_snapshot(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
@@ -535,18 +754,100 @@ fn op_capture_from_extension(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
 
 pub fn ops() -> Vec<OpSpec> {
     vec![
-        op!("sources.list", "sources.read", Read, "List registered sources with health", Empty, op_list, mcp = "list_sources"),
-        op!("sources.show", "sources.read", Read, "Show a source, its manifest and last snapshot", SourceIdParam, op_show, resource = "source_id"),
-        op!("sources.health", "sources.read", Read, "Freshness, failures and stale counts per source", Empty, op_health),
-        op!("sources.refresh", "sources.refresh", Write, "Queue compliant refresh jobs for permitted sources", RefreshParams, op_refresh, mcp = "refresh_source", network = true),
-        op!("sources.test", "sources.refresh", Write, "Queue a one-request connectivity test (nothing persisted)", SourceIdParam, op_test, network = true),
-        op!("sources.validate", "sources.read", Read, "Validate a connector manifest against the free-only provider gate", ManifestParam, op_validate),
-        op!("sources.register", "sources.manage", Elevated, "Register or update a connector manifest", ManifestParam, op_register),
-        op!("sources.disable", "sources.manage", Elevated, "Disable a source (data retained with a freshness warning)", DisableParams, op_disable),
+        op!(
+            "sources.list",
+            "sources.read",
+            Read,
+            "List registered sources with health",
+            Empty,
+            op_list,
+            mcp = "list_sources"
+        ),
+        op!(
+            "sources.show",
+            "sources.read",
+            Read,
+            "Show a source, its manifest and last snapshot",
+            SourceIdParam,
+            op_show,
+            resource = "source_id"
+        ),
+        op!(
+            "sources.health",
+            "sources.read",
+            Read,
+            "Freshness, failures and stale counts per source",
+            Empty,
+            op_health
+        ),
+        op!(
+            "sources.refresh",
+            "sources.refresh",
+            Write,
+            "Queue compliant refresh jobs for permitted sources",
+            RefreshParams,
+            op_refresh,
+            mcp = "refresh_source",
+            network = true
+        ),
+        op!(
+            "sources.test",
+            "sources.refresh",
+            Write,
+            "Queue a one-request connectivity test (nothing persisted)",
+            SourceIdParam,
+            op_test,
+            network = true
+        ),
+        op!(
+            "sources.validate",
+            "sources.read",
+            Read,
+            "Validate a connector manifest against the free-only provider gate",
+            ManifestParam,
+            op_validate
+        ),
+        op!(
+            "sources.register",
+            "sources.manage",
+            Elevated,
+            "Register or update a connector manifest",
+            ManifestParam,
+            op_register
+        ),
+        op!(
+            "sources.disable",
+            "sources.manage",
+            Elevated,
+            "Disable a source (data retained with a freshness warning)",
+            DisableParams,
+            op_disable
+        ),
         op!("sources.enable", "sources.manage", Elevated, "Re-enable a source", SourceIdParam, op_enable),
-        op!("sources.history", "sources.read", Read, "Snapshot history for a source", HistoryParams, op_history),
-        op!("sources.import_snapshot", "sources.manage", Elevated, "Import a page you saved from the official site (for sources that block automation)", ImportSnapshotParams, op_import_snapshot),
-        op!("sources.capture_from_extension", "extension.prefill", Write, "Browser extension: capture the official page the user is viewing", ImportSnapshotParams, op_capture_from_extension),
+        op!(
+            "sources.history",
+            "sources.read",
+            Read,
+            "Snapshot history for a source",
+            HistoryParams,
+            op_history
+        ),
+        op!(
+            "sources.import_snapshot",
+            "sources.manage",
+            Elevated,
+            "Import a page you saved from the official site (for sources that block automation)",
+            ImportSnapshotParams,
+            op_import_snapshot
+        ),
+        op!(
+            "sources.capture_from_extension",
+            "extension.prefill",
+            Write,
+            "Browser extension: capture the official page the user is viewing",
+            ImportSnapshotParams,
+            op_capture_from_extension
+        ),
     ]
 }
 

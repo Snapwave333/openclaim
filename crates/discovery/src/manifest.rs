@@ -94,7 +94,10 @@ pub const BUNDLED_MANIFESTS: &[&str] = &[
 ];
 
 pub fn bundled() -> Vec<ConnectorManifest> {
-    BUNDLED_MANIFESTS.iter().map(|j| ConnectorManifest::parse(j).expect("bundled manifests are valid")).collect()
+    BUNDLED_MANIFESTS
+        .iter()
+        .map(|j| ConnectorManifest::parse(j).expect("bundled manifests are valid"))
+        .collect()
 }
 
 #[cfg(test)]

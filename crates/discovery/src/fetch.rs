@@ -44,7 +44,11 @@ pub struct FetchError {
 
 impl FetchError {
     fn new(class: FetchFailure, message: impl Into<String>) -> Self {
-        FetchError { class, message: message.into(), retry_after_secs: None }
+        FetchError {
+            class,
+            message: message.into(),
+            retry_after_secs: None,
+        }
     }
 }
 
@@ -57,7 +61,9 @@ impl Resolve for SafeResolver {
             let addrs = tokio::net::lookup_host((host.as_str(), 0)).await?;
             let safe: Vec<SocketAddr> = addrs.filter(|a| !is_forbidden_ip(a.ip())).collect();
             if safe.is_empty() {
-                return Err(Box::new(std::io::Error::other(format!("{host} resolves only to private/loopback addresses"))) as Box<dyn std::error::Error + Send + Sync>);
+                return Err(
+                    Box::new(std::io::Error::other(format!("{host} resolves only to private/loopback addresses"))) as Box<dyn std::error::Error + Send + Sync>
+                );
             }
             Ok(Box::new(safe.into_iter()) as Addrs)
         })
@@ -94,7 +100,13 @@ impl Fetcher {
             .gzip(true)
             .build()
             .map_err(|e| e.to_string())?;
-        Ok(Fetcher { client, policy, robots: Mutex::new(HashMap::new()), last_request: Mutex::new(HashMap::new()), requests_made: Mutex::new(0) })
+        Ok(Fetcher {
+            client,
+            policy,
+            robots: Mutex::new(HashMap::new()),
+            last_request: Mutex::new(HashMap::new()),
+            requests_made: Mutex::new(0),
+        })
     }
 
     pub fn policy(&self) -> &FetchPolicy {
@@ -107,10 +119,10 @@ impl Fetcher {
             let last = self.last_request.lock().await;
             last.get(host).map(|t| min.saturating_sub(t.elapsed()))
         };
-        if let Some(w) = wait {
-            if !w.is_zero() {
-                tokio::time::sleep(w).await;
-            }
+        if let Some(w) = wait
+            && !w.is_zero()
+        {
+            tokio::time::sleep(w).await;
         }
         self.last_request.lock().await.insert(host.to_string(), Instant::now());
         *self.requests_made.lock().await += 1;
@@ -152,13 +164,19 @@ impl Fetcher {
         let mut crawl_delay = None;
         if let Some(r) = &robot {
             if !r.allowed(url) {
-                return Err(FetchError::new(FetchFailure::RobotsDisallowed, format!("robots.txt on {host} disallows {}", parsed.path())));
+                return Err(FetchError::new(
+                    FetchFailure::RobotsDisallowed,
+                    format!("robots.txt on {host} disallows {}", parsed.path()),
+                ));
             }
             crawl_delay = r.delay.map(|d| Duration::from_secs_f32(d.min(60.0)));
         }
         self.pace(&host, crawl_delay).await;
         let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, HeaderValue::from_str(&self.policy.user_agent).map_err(|e| FetchError::new(FetchFailure::PolicyBlocked, e.to_string()))?);
+        headers.insert(
+            USER_AGENT,
+            HeaderValue::from_str(&self.policy.user_agent).map_err(|e| FetchError::new(FetchFailure::PolicyBlocked, e.to_string()))?,
+        );
         if let Some((etag, lm)) = conditional {
             if let Some(e) = etag.and_then(|e| HeaderValue::from_str(&e).ok()) {
                 headers.insert(IF_NONE_MATCH, e);
@@ -168,40 +186,96 @@ impl Fetcher {
             }
         }
         let resp = self.client.get(parsed.clone()).headers(headers).send().await.map_err(|e| {
-            let class = if e.is_timeout() { FetchFailure::NetworkError } else if e.is_redirect() { FetchFailure::PolicyBlocked } else { FetchFailure::NetworkError };
+            let class = if e.is_timeout() {
+                FetchFailure::NetworkError
+            } else if e.is_redirect() {
+                FetchFailure::PolicyBlocked
+            } else {
+                FetchFailure::NetworkError
+            };
             FetchError::new(class, format!("request to {host} failed: {e}"))
         })?;
         let status = resp.status().as_u16();
         let final_url = resp.url().to_string();
         let etag = resp.headers().get("etag").and_then(|v| v.to_str().ok()).map(str::to_string);
         let last_modified = resp.headers().get("last-modified").and_then(|v| v.to_str().ok()).map(str::to_string);
-        let retry_after = resp.headers().get(RETRY_AFTER).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u64>().ok());
+        let retry_after = resp
+            .headers()
+            .get(RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok());
         if status == 304 {
-            return Ok(Fetched { url: final_url, status, body: Vec::new(), etag, last_modified, not_modified: true });
+            return Ok(Fetched {
+                url: final_url,
+                status,
+                body: Vec::new(),
+                etag,
+                last_modified,
+                not_modified: true,
+            });
         }
-        let body = read_bounded(resp, self.policy.max_body).await.map_err(|m| FetchError::new(FetchFailure::HttpError, m))?;
+        let body = read_bounded(resp, self.policy.max_body)
+            .await
+            .map_err(|m| FetchError::new(FetchFailure::HttpError, m))?;
         if status == 429 {
-            return Err(FetchError { class: FetchFailure::RateLimited, message: format!("{host} rate-limited the request (429)"), retry_after_secs: retry_after.or(Some(600)) });
+            return Err(FetchError {
+                class: FetchFailure::RateLimited,
+                message: format!("{host} rate-limited the request (429)"),
+                retry_after_secs: retry_after.or(Some(600)),
+            });
         }
         if status == 403 || status == 503 || status == 401 {
             let text = String::from_utf8_lossy(&body[..body.len().min(20_000)]).to_lowercase();
-            let bot = ["automated request", "captcha", "access denied", "rate threshold", "bot", "cf-chl", "challenge", "fair access"].iter().any(|k| text.contains(k));
+            let bot = [
+                "automated request",
+                "captcha",
+                "access denied",
+                "rate threshold",
+                "bot",
+                "cf-chl",
+                "challenge",
+                "fair access",
+            ]
+            .iter()
+            .any(|k| text.contains(k));
             let class = if bot { FetchFailure::AntiBotBlock } else { FetchFailure::HttpError };
-            return Err(FetchError { class, message: format!("{host} answered HTTP {status}{}", if bot { " with an anti-automation page; OpenClaim does not bypass it" } else { "" }), retry_after_secs: retry_after });
+            return Err(FetchError {
+                class,
+                message: format!(
+                    "{host} answered HTTP {status}{}",
+                    if bot {
+                        " with an anti-automation page; OpenClaim does not bypass it"
+                    } else {
+                        ""
+                    }
+                ),
+                retry_after_secs: retry_after,
+            });
         }
         if !(200..300).contains(&status) {
-            return Err(FetchError { class: FetchFailure::HttpError, message: format!("{host} answered HTTP {status}"), retry_after_secs: retry_after });
+            return Err(FetchError {
+                class: FetchFailure::HttpError,
+                message: format!("{host} answered HTTP {status}"),
+                retry_after_secs: retry_after,
+            });
         }
-        Ok(Fetched { url: final_url, status, body, etag, last_modified, not_modified: false })
+        Ok(Fetched {
+            url: final_url,
+            status,
+            body,
+            etag,
+            last_modified,
+            not_modified: false,
+        })
     }
 }
 
 async fn read_bounded(resp: reqwest::Response, max: usize) -> Result<Vec<u8>, String> {
     use futures::StreamExt;
-    if let Some(len) = resp.content_length() {
-        if len as usize > max {
-            return Err(format!("response body of {len} bytes exceeds the {max}-byte limit"));
-        }
+    if let Some(len) = resp.content_length()
+        && len as usize > max
+    {
+        return Err(format!("response body of {len} bytes exceeds the {max}-byte limit"));
     }
     let mut out = Vec::new();
     let mut stream = resp.bytes_stream();
@@ -216,7 +290,10 @@ async fn read_bounded(resp: reqwest::Response, max: usize) -> Result<Vec<u8>, St
 }
 
 pub fn default_user_agent(contact: Option<&str>) -> String {
-    let base = format!("OpenClaim/{} (+https://github.com/openclaim/openclaim; free open-source settlement assistant)", openclaim_domain::VERSION);
+    let base = format!(
+        "OpenClaim/{} (+https://github.com/openclaim/openclaim; free open-source settlement assistant)",
+        openclaim_domain::VERSION
+    );
     match contact {
         Some(c) if !c.trim().is_empty() => format!("{base} {}", c.trim()),
         _ => base,
@@ -229,9 +306,25 @@ mod tests {
 
     #[tokio::test]
     async fn offline_and_policy_rejections_need_no_network() {
-        let f = Fetcher::new(FetchPolicy { user_agent: "t".into(), allowed_hosts: vec!["ftc.gov".into()], min_interval: Duration::from_millis(500), max_body: 1024, timeout: Duration::from_secs(5), offline: true }).unwrap();
+        let f = Fetcher::new(FetchPolicy {
+            user_agent: "t".into(),
+            allowed_hosts: vec!["ftc.gov".into()],
+            min_interval: Duration::from_millis(500),
+            max_body: 1024,
+            timeout: Duration::from_secs(5),
+            offline: true,
+        })
+        .unwrap();
         assert_eq!(f.get("https://www.ftc.gov/", None).await.unwrap_err().class, FetchFailure::Offline);
-        let f = Fetcher::new(FetchPolicy { user_agent: "t".into(), allowed_hosts: vec!["ftc.gov".into()], min_interval: Duration::from_millis(500), max_body: 1024, timeout: Duration::from_secs(5), offline: false }).unwrap();
+        let f = Fetcher::new(FetchPolicy {
+            user_agent: "t".into(),
+            allowed_hosts: vec!["ftc.gov".into()],
+            min_interval: Duration::from_millis(500),
+            max_body: 1024,
+            timeout: Duration::from_secs(5),
+            offline: false,
+        })
+        .unwrap();
         assert_eq!(f.get("https://evil.example/", None).await.unwrap_err().class, FetchFailure::PolicyBlocked);
         assert_eq!(f.get("http://www.ftc.gov/", None).await.unwrap_err().class, FetchFailure::PolicyBlocked);
         assert_eq!(f.get("https://127.0.0.1/", None).await.unwrap_err().class, FetchFailure::PolicyBlocked);

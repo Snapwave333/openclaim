@@ -7,7 +7,11 @@ use serde_json::{Value, json};
 use std::io::IsTerminal;
 
 fn main() {
-    let code = tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("runtime").block_on(run());
+    let code = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("runtime")
+        .block_on(run());
     std::process::exit(code);
 }
 
@@ -24,7 +28,10 @@ async fn run() -> i32 {
     };
     let g = globals(&matches);
     if matches.subcommand_name() == Some("help-tree") {
-        return print_envelope(&envelope_from_local(help_json(), &g), if g.output.is_machine() { g.output } else { Output::Json });
+        return print_envelope(
+            &envelope_from_local(help_json(), &g),
+            if g.output.is_machine() { g.output } else { Output::Json },
+        );
     }
     let Some((spec, leaf)) = resolve(&matches) else {
         let _ = cmd.print_help();
@@ -103,15 +110,25 @@ async fn local_command(name: &str, spec: &CmdSpec, leaf: &ArgMatches, g: &Global
         "daemon_start" => {
             if leaf.get_flag("foreground") {
                 let bin = Client::daemon_binary()?;
-                let status = std::process::Command::new(bin).arg("--data-dir").arg(&client.paths.data_dir).status().map_err(|e| OcError::unavailable(e.to_string()))?;
+                let status = std::process::Command::new(bin)
+                    .arg("--data-dir")
+                    .arg(&client.paths.data_dir)
+                    .status()
+                    .map_err(|e| OcError::unavailable(e.to_string()))?;
                 return Ok(Some(envelope_from_local(json!({"exited": status.code()}), g)));
             }
             if openclaim_ipc_ping(client).await {
-                return Ok(Some(envelope_from_local(json!({"running": true, "started_now": false, "ipc": client.endpoint.display()}), g)));
+                return Ok(Some(envelope_from_local(
+                    json!({"running": true, "started_now": false, "ipc": client.endpoint.display()}),
+                    g,
+                )));
             }
             let pid = client.spawn_daemon()?;
             let ok = wait_for_daemon(client).await;
-            Ok(Some(envelope_from_local(json!({"running": ok, "started_now": ok, "pid": pid, "ipc": client.endpoint.display()}), g)))
+            Ok(Some(envelope_from_local(
+                json!({"running": ok, "started_now": ok, "pid": pid, "ipc": client.endpoint.display()}),
+                g,
+            )))
         }
         "daemon_stop" => {
             let env = client.call(&request_for("daemon.stop", Value::Null, g)).await;
@@ -132,7 +149,8 @@ async fn local_command(name: &str, spec: &CmdSpec, leaf: &ArgMatches, g: &Global
         "daemon_status" => {
             let info = client.daemon_info();
             let reachable = openclaim_ipc_ping(client).await;
-            let mut data = json!({"reachable": reachable, "ipc": client.endpoint.display(), "data_dir": client.paths.data_dir.to_string_lossy(), "daemon_file": info});
+            let mut data =
+                json!({"reachable": reachable, "ipc": client.endpoint.display(), "data_dir": client.paths.data_dir.to_string_lossy(), "daemon_file": info});
             if reachable {
                 let env = client.call(&request_for("daemon.status", Value::Null, g)).await;
                 data["daemon"] = env.data.unwrap_or(Value::Null);
@@ -143,7 +161,9 @@ async fn local_command(name: &str, spec: &CmdSpec, leaf: &ArgMatches, g: &Global
             let secs = leaf.get_one::<i64>("seconds").copied().unwrap_or(0);
             let start = std::time::Instant::now();
             let first = client.call(&request_for("discover.watch", Value::Null, g)).await;
-            let Some(mut after) = first.data.as_ref().and_then(|d| d["after_seq"].as_i64()) else { return Ok(Some(first)) };
+            let Some(mut after) = first.data.as_ref().and_then(|d| d["after_seq"].as_i64()) else {
+                return Ok(Some(first));
+            };
             loop {
                 let env = client.call(&request_for("events.poll", json!({"after_seq": after, "limit": 200}), g)).await;
                 if let Some(e) = env.error {
@@ -168,7 +188,9 @@ async fn local_command(name: &str, spec: &CmdSpec, leaf: &ArgMatches, g: &Global
             let mut after = 0i64;
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(g.timeout_secs.max(5) * 10);
             loop {
-                let env = client.call(&request_for("jobs.watch", json!({"job_id": job_id, "after_sequence": after}), g)).await;
+                let env = client
+                    .call(&request_for("jobs.watch", json!({"job_id": job_id, "after_sequence": after}), g))
+                    .await;
                 let Some(data) = env.data.clone() else { return Ok(Some(env)) };
                 for ev in data["events"].as_array().cloned().unwrap_or_default() {
                     after = after.max(ev["sequence"].as_i64().unwrap_or(after));
@@ -202,7 +224,10 @@ async fn local_command(name: &str, spec: &CmdSpec, leaf: &ArgMatches, g: &Global
                     return Ok(Some(final_env));
                 }
                 if std::time::Instant::now() > deadline {
-                    return Err(OcError::new(openclaim_domain::ErrorCode::Timeout, "stopped waiting; the job continues in the daemon").with_next_action(format!("openclaim jobs show {job_id}")));
+                    return Err(
+                        OcError::new(openclaim_domain::ErrorCode::Timeout, "stopped waiting; the job continues in the daemon")
+                            .with_next_action(format!("openclaim jobs show {job_id}")),
+                    );
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
             }
@@ -211,7 +236,10 @@ async fn local_command(name: &str, spec: &CmdSpec, leaf: &ArgMatches, g: &Global
             let env = client.call(&request_for("schema.export", Value::Null, g)).await;
             if let (Some(file), Some(data)) = (leaf.get_one::<String>("file"), env.data.as_ref()) {
                 std::fs::write(file, serde_json::to_string_pretty(data).unwrap_or_default()).map_err(|e| OcError::invalid(format!("write {file}: {e}")))?;
-                return Ok(Some(envelope_from_local(json!({"written": file, "operations": data["operations"].as_array().map(|a| a.len()).unwrap_or(0)}), g)));
+                return Ok(Some(envelope_from_local(
+                    json!({"written": file, "operations": data["operations"].as_array().map(|a| a.len()).unwrap_or(0)}),
+                    g,
+                )));
             }
             Ok(Some(env))
         }
@@ -226,7 +254,10 @@ async fn local_command(name: &str, spec: &CmdSpec, leaf: &ArgMatches, g: &Global
             Ok(None)
         }
         "mcp_inspect" => Ok(Some(envelope_from_local(openclaim_mcp_adapter::capabilities(), g))),
-        "mcp_list_tools" => Ok(Some(envelope_from_local(json!({"items": openclaim_mcp_adapter::tool_list().into_iter().map(|t| json!({"name": t["name"], "description": t["description"], "operation": t["_openclaim"]["operation"], "scope": t["_openclaim"]["scope"]})).collect::<Vec<_>>()}), g))),
+        "mcp_list_tools" => Ok(Some(envelope_from_local(
+            json!({"items": openclaim_mcp_adapter::tool_list().into_iter().map(|t| json!({"name": t["name"], "description": t["description"], "operation": t["_openclaim"]["operation"], "scope": t["_openclaim"]["scope"]})).collect::<Vec<_>>()}),
+            g,
+        ))),
         "mcp_test" => Ok(Some(envelope_from_local(openclaim_mcp_adapter::self_test(), g))),
         "completion" => {
             let shell = match spec.name {
@@ -241,7 +272,9 @@ async fn local_command(name: &str, spec: &CmdSpec, leaf: &ArgMatches, g: &Global
         "gui_open" => {
             client.ensure().await?;
             let info = client.daemon_info().ok_or_else(|| OcError::unavailable("daemon info file missing"))?;
-            let port = info.http_port.ok_or_else(|| OcError::unavailable("the daemon is running without the HTTP API"))?;
+            let port = info
+                .http_port
+                .ok_or_else(|| OcError::unavailable("the daemon is running without the HTTP API"))?;
             let url = format!("http://127.0.0.1:{port}/");
             if !leaf.get_flag("no-browser") {
                 open_browser(&url);
@@ -274,4 +307,3 @@ fn open_browser(url: &str) {
     #[cfg(all(unix, not(target_os = "macos")))]
     let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }
-

@@ -19,7 +19,12 @@ pub fn parse_feed(bytes: &[u8]) -> Vec<ParsedTip> {
                 .map(|s| clean_text(&html_fragment_to_text(&s.content), 1000))
                 .or_else(|| e.content.and_then(|c| c.body).map(|b| clean_text(&html_fragment_to_text(&b), 1000)));
             let published = e.published.or(e.updated).map(|d| d.to_rfc3339());
-            Some(ParsedTip { url: link, title, published, summary })
+            Some(ParsedTip {
+                url: link,
+                title,
+                published,
+                summary,
+            })
         })
         .take(200)
         .collect()

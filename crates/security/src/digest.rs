@@ -33,7 +33,10 @@ mod tests {
 
     #[test]
     fn key_order_does_not_change_digest() {
-        assert_eq!(json_digest(&json!({"a":1,"b":[1,{"y":2,"x":1}]})), json_digest(&json!({"b":[1,{"x":1,"y":2}],"a":1})));
+        assert_eq!(
+            json_digest(&json!({"a":1,"b":[1,{"y":2,"x":1}]})),
+            json_digest(&json!({"b":[1,{"x":1,"y":2}],"a":1}))
+        );
         assert_ne!(json_digest(&json!({"a":1})), json_digest(&json!({"a":2})));
     }
 }

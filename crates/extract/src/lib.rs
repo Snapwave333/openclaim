@@ -67,19 +67,24 @@ pub fn detect(bytes: &[u8], filename: &str) -> OcResult<DocType> {
         return Ok(DocType::Image);
     }
     if bytes.starts_with(b"PK\x03\x04") || bytes.starts_with(b"MZ") || bytes.starts_with(&[0x1F, 0x8B]) {
-        return Err(OcError::policy("archives and executables are not accepted; import the individual documents instead"));
+        return Err(OcError::policy(
+            "archives and executables are not accepted; import the individual documents instead",
+        ));
     }
-    let text_like = std::str::from_utf8(&bytes[..bytes.len().min(4096)]).is_ok()
-        || bytes.iter().take(4096).filter(|b| **b == 0).count() == 0;
+    let text_like = std::str::from_utf8(&bytes[..bytes.len().min(4096)]).is_ok() || bytes.iter().take(4096).filter(|b| **b == 0).count() == 0;
     if !text_like {
-        return Err(OcError::invalid(format!("'{filename}' is not a supported document type (PDF, image, CSV, EML, MBOX, text)")));
+        return Err(OcError::invalid(format!(
+            "'{filename}' is not a supported document type (PDF, image, CSV, EML, MBOX, text)"
+        )));
     }
     Ok(match ext.as_str() {
         "csv" => DocType::Csv,
         "eml" => DocType::Eml,
         "mbox" | "mbx" => DocType::Mbox,
         "html" | "htm" | "svg" | "js" | "exe" | "bat" | "ps1" | "cmd" => {
-            return Err(OcError::policy(format!("'.{ext}' files can carry active content and are not accepted; save as PDF or text")));
+            return Err(OcError::policy(format!(
+                "'.{ext}' files can carry active content and are not accepted; save as PDF or text"
+            )));
         }
         _ if bytes.starts_with(b"From ") => DocType::Mbox,
         _ => DocType::Text,
@@ -145,7 +150,11 @@ pub fn extract(bytes: &[u8], doc_type: DocType, ocr: &OcrConfig) -> Extraction {
         },
         DocType::Image => {
             if !ocr.enabled {
-                ("ocr_unavailable", String::new(), Some("OCR is turned off in settings (vault.ocr=false).".to_string()))
+                (
+                    "ocr_unavailable",
+                    String::new(),
+                    Some("OCR is turned off in settings (vault.ocr=false).".to_string()),
+                )
             } else {
                 match find_tesseract(ocr) {
                     None => (
@@ -168,7 +177,11 @@ pub fn extract(bytes: &[u8], doc_type: DocType, ocr: &OcrConfig) -> Extraction {
             let (t, n, truncated) = mbox_text(bytes);
             let note = Some(format!(
                 "{n} message(s) parsed{}",
-                if truncated { format!("; stopped at the {MAX_MBOX_MESSAGES}-message limit") } else { String::new() }
+                if truncated {
+                    format!("; stopped at the {MAX_MBOX_MESSAGES}-message limit")
+                } else {
+                    String::new()
+                }
             ));
             ("extracted", t, note)
         }
@@ -177,7 +190,13 @@ pub fn extract(bytes: &[u8], doc_type: DocType, ocr: &OcrConfig) -> Extraction {
     let text = clean_text(&raw, MAX_TEXT_CHARS);
     let classification = classify(&text).to_string();
     let suggestions = suggest_facts(&text);
-    Extraction { state: state.to_string(), text, note, classification, suggestions }
+    Extraction {
+        state: state.to_string(),
+        text,
+        note,
+        classification,
+        suggestions,
+    }
 }
 
 fn pdf_text(bytes: &[u8]) -> Result<String, String> {
@@ -263,7 +282,14 @@ fn mbox_text(bytes: &[u8]) -> (String, usize, bool) {
 pub fn classify(text: &str) -> &'static str {
     let t = text.to_lowercase();
     let has = |words: &[&str]| words.iter().filter(|w| t.contains(*w)).count();
-    if has(&["class action", "settlement administrator", "claim form", "class member", "notice of proposed settlement"]) >= 1 {
+    if has(&[
+        "class action",
+        "settlement administrator",
+        "claim form",
+        "class member",
+        "notice of proposed settlement",
+    ]) >= 1
+    {
         "settlement_notice"
     } else if has(&["refund", "ftc", "federal trade commission"]) >= 2 {
         "refund_notice"
@@ -282,9 +308,11 @@ static NUMERIC_DATE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\b(\d{4})-(
 static PROSE_DATE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+(\d{1,2}),?\s+(\d{4})\b").unwrap()
 });
-static AMOUNT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\b(?:total|amount|paid|charged)\b[^\n$]{0,30}\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)").unwrap());
+static AMOUNT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\b(?:total|amount|paid|charged)\b[^\n$]{0,30}\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)").unwrap());
 static MERCHANT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?im)^(?:from|merchant|sold by|seller|store)\s*:\s*([^\n<]{2,60})").unwrap());
-static CASE_NO: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\bcase\s+(?:no\.?|number)\s*:?\s*([0-9]{1,2}:[0-9]{2}-cv-[0-9]{3,6}(?:-[A-Z]{2,4})?|[A-Z0-9-]{5,30})").unwrap());
+static CASE_NO: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\bcase\s+(?:no\.?|number)\s*:?\s*([0-9]{1,2}:[0-9]{2}-cv-[0-9]{3,6}(?:-[A-Z]{2,4})?|[A-Z0-9-]{5,30})").unwrap());
 
 fn excerpt(text: &str, start: usize, end: usize) -> String {
     let s = text[..start].char_indices().rev().nth(40).map(|(i, _)| i).unwrap_or(0);
@@ -299,7 +327,13 @@ pub fn suggest_facts(text: &str) -> Vec<FactSuggestion> {
         if out.iter().any(|s: &FactSuggestion| s.kind == kind && s.value == value) || out.len() >= 50 {
             return;
         }
-        out.push(FactSuggestion { kind: kind.into(), value, span_start: start, span_end: end, excerpt: excerpt(text, start, end) });
+        out.push(FactSuggestion {
+            kind: kind.into(),
+            value,
+            span_start: start,
+            span_end: end,
+            excerpt: excerpt(text, start, end),
+        });
     };
     for c in NUMERIC_DATE.captures_iter(text) {
         let m = c.get(0).unwrap();
@@ -388,7 +422,13 @@ mod tests {
         assert_eq!(e.state, "extracted");
         assert!(e.text.contains("Notice of Class Action Settlement"));
         assert_eq!(e.classification, "settlement_notice");
-        let mbox = [b"From a@b Tue Sep  1 10:00:00 2026\n".as_slice(), eml, b"\nFrom c@d Tue Sep  1 11:00:00 2026\n", eml].concat();
+        let mbox = [
+            b"From a@b Tue Sep  1 10:00:00 2026\n".as_slice(),
+            eml,
+            b"\nFrom c@d Tue Sep  1 11:00:00 2026\n",
+            eml,
+        ]
+        .concat();
         let m = extract(&mbox, DocType::Mbox, &OcrConfig::default());
         assert!(m.note.unwrap().starts_with("2 message"));
     }

@@ -49,11 +49,20 @@ impl Interval {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Criterion {
-    All { of: Vec<Criterion> },
-    Any { of: Vec<Criterion> },
-    Not { of: Box<Criterion> },
+    All {
+        of: Vec<Criterion>,
+    },
+    Any {
+        of: Vec<Criterion>,
+    },
+    Not {
+        of: Box<Criterion>,
+    },
     /// Lived in one of the jurisdictions (USPS state codes or country codes) at some point in `during`.
-    ResidedIn { jurisdictions: Vec<String>, during: Option<Interval> },
+    ResidedIn {
+        jurisdictions: Vec<String>,
+        during: Option<Interval>,
+    },
     /// Had a purchase/service/account relationship matching the filters during `during`.
     ConsumerFact {
         fact_type: String,
@@ -62,7 +71,10 @@ pub enum Criterion {
         during: Option<Interval>,
     },
     /// A yes/no statement only the claimant can make (e.g. "received a notice postcard").
-    Attestation { key: String, question: String },
+    Attestation {
+        key: String,
+        question: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -258,12 +270,20 @@ struct Eval {
 
 impl Eval {
     fn leaf(outcome: Tri, explanation: String, facts: Vec<String>, missing: Option<String>) -> Eval {
-        Eval { outcome, explanation: vec![explanation], facts, missing: missing.into_iter().collect() }
+        Eval {
+            outcome,
+            explanation: vec![explanation],
+            facts,
+            missing: missing.into_iter().collect(),
+        }
     }
 }
 
 fn spans_of(start: &Option<String>, end: &Option<String>) -> OcResult<Span> {
-    Ok(Span { start: start.as_deref().map(parse_date).transpose()?, end: end.as_deref().map(parse_date).transpose()? })
+    Ok(Span {
+        start: start.as_deref().map(parse_date).transpose()?,
+        end: end.as_deref().map(parse_date).transpose()?,
+    })
 }
 
 /// True when the union of `periods` covers all of `target` (requires bounded target).
@@ -361,7 +381,12 @@ fn eval(c: &Criterion, facts: &FactSet) -> OcResult<Eval> {
                 )
             }
         }
-        Criterion::ConsumerFact { fact_type, merchant, product, during } => {
+        Criterion::ConsumerFact {
+            fact_type,
+            merchant,
+            product,
+            during,
+        } => {
             let target = during.as_ref().map(Interval::span).transpose()?.unwrap_or(Span { start: None, end: None });
             let window = describe_interval(during);
             let what = [Some(fact_type.clone()), merchant.clone(), product.clone()]
@@ -372,10 +397,7 @@ fn eval(c: &Criterion, facts: &FactSet) -> OcResult<Eval> {
             let mut yes = Vec::new();
             let mut no = Vec::new();
             for f in &facts.consumer_facts {
-                if !f.fact_type.eq_ignore_ascii_case(fact_type)
-                    || !matches_text(merchant, &f.merchant)
-                    || !matches_text(product, &f.product)
-                {
+                if !f.fact_type.eq_ignore_ascii_case(fact_type) || !matches_text(merchant, &f.merchant) || !matches_text(product, &f.product) {
                     continue;
                 }
                 let span = spans_of(&f.start, &f.end)?;
@@ -415,7 +437,12 @@ fn eval(c: &Criterion, facts: &FactSet) -> OcResult<Eval> {
 }
 
 fn combine(outcome: Tri, parts: Vec<Eval>) -> Eval {
-    let mut e = Eval { outcome, explanation: vec![], facts: vec![], missing: vec![] };
+    let mut e = Eval {
+        outcome,
+        explanation: vec![],
+        facts: vec![],
+        missing: vec![],
+    };
     for p in parts {
         e.explanation.extend(p.explanation);
         e.facts.extend(p.facts);
@@ -487,15 +514,30 @@ pub fn evaluate(rules: Option<&RuleSet>, facts: &FactSet) -> OcResult<Assessment
     let (state, summary) = if any_required_no {
         (MatchState::Unlikely, "At least one required condition conflicts with your records.")
     } else if any_ambiguous {
-        (MatchState::ManualReview, "The official terms include conditions that need a careful human reading.")
+        (
+            MatchState::ManualReview,
+            "The official terms include conditions that need a careful human reading.",
+        )
     } else if any_required_unknown {
-        (MatchState::NeedsMoreInformation, "Some required conditions cannot be checked from your records yet.")
+        (
+            MatchState::NeedsMoreInformation,
+            "Some required conditions cannot be checked from your records yet.",
+        )
     } else if reasons.iter().filter(|r| r.required).all(|r| r.outcome == Tri::Yes) {
-        (MatchState::PotentialMatch, "Your records appear to support every required condition. Eligibility still requires review.")
+        (
+            MatchState::PotentialMatch,
+            "Your records appear to support every required condition. Eligibility still requires review.",
+        )
     } else {
         (MatchState::ManualReview, "The result could not be classified automatically.")
     };
-    Ok(Assessment { state, summary: summary.into(), reasons, missing_facts: missing, disclaimer: DISCLAIMER.into() })
+    Ok(Assessment {
+        state,
+        summary: summary.into(),
+        reasons,
+        missing_facts: missing,
+        disclaimer: DISCLAIMER.into(),
+    })
 }
 
 #[cfg(test)]
@@ -503,7 +545,10 @@ mod tests {
     use super::*;
 
     fn interval(s: &str, e: &str) -> Option<Interval> {
-        Some(Interval { start: Some(s.into()), end: Some(e.into()) })
+        Some(Interval {
+            start: Some(s.into()),
+            end: Some(e.into()),
+        })
     }
 
     fn rules() -> RuleSet {
@@ -515,7 +560,10 @@ mod tests {
                     label: "California resident during class period".into(),
                     required: true,
                     ambiguous: false,
-                    criterion: Criterion::ResidedIn { jurisdictions: vec!["CA".into()], during: interval("2019-01-01", "2021-12-31") },
+                    criterion: Criterion::ResidedIn {
+                        jurisdictions: vec!["CA".into()],
+                        during: interval("2019-01-01", "2021-12-31"),
+                    },
                     source_excerpt: "All persons residing in California between January 1, 2019 and December 31, 2021".into(),
                     source_locator: "https://example.test/notice#class".into(),
                 },
@@ -539,7 +587,10 @@ mod tests {
                     required: true,
                     ambiguous: false,
                     criterion: Criterion::Not {
-                        of: Box::new(Criterion::Attestation { key: "acme_employee".into(), question: "Were you an Acme employee?".into() }),
+                        of: Box::new(Criterion::Attestation {
+                            key: "acme_employee".into(),
+                            question: "Were you an Acme employee?".into(),
+                        }),
                     },
                     source_excerpt: "Excluded are employees of Acme".into(),
                     source_locator: "https://example.test/notice#exclusions".into(),
@@ -550,7 +601,12 @@ mod tests {
 
     fn base_facts() -> FactSet {
         let mut f = FactSet::default();
-        f.residences.push(ResidenceFact { id: "r1".into(), jurisdiction: "CA".into(), start: Some("2018-05-01".into()), end: Some("2020-06-30".into()) });
+        f.residences.push(ResidenceFact {
+            id: "r1".into(),
+            jurisdiction: "CA".into(),
+            start: Some("2018-05-01".into()),
+            end: Some("2020-06-30".into()),
+        });
         f.consumer_facts.push(ConsumerFactRecord {
             id: "c1".into(),
             fact_type: "purchase".into(),
@@ -590,7 +646,12 @@ mod tests {
     #[test]
     fn complete_residence_history_elsewhere_is_no() {
         let mut f = base_facts();
-        f.residences = vec![ResidenceFact { id: "r2".into(), jurisdiction: "NY".into(), start: Some("2015-01-01".into()), end: None }];
+        f.residences = vec![ResidenceFact {
+            id: "r2".into(),
+            jurisdiction: "NY".into(),
+            start: Some("2015-01-01".into()),
+            end: None,
+        }];
         f.attestations.insert("acme_employee".into(), false);
         let a = evaluate(Some(&rules()), &f).unwrap();
         assert_eq!(a.state, MatchState::Unlikely);
@@ -600,7 +661,12 @@ mod tests {
     #[test]
     fn partial_residence_history_elsewhere_is_unknown() {
         let mut f = base_facts();
-        f.residences = vec![ResidenceFact { id: "r2".into(), jurisdiction: "NY".into(), start: Some("2020-01-01".into()), end: None }];
+        f.residences = vec![ResidenceFact {
+            id: "r2".into(),
+            jurisdiction: "NY".into(),
+            start: Some("2020-01-01".into()),
+            end: None,
+        }];
         let a = evaluate(Some(&rules()), &f).unwrap();
         assert_eq!(a.reasons[0].outcome, Tri::Unknown);
     }
@@ -643,7 +709,10 @@ mod tests {
     #[test]
     fn no_rules_is_manual_review_and_not_in_class_is_not_applicable() {
         assert_eq!(evaluate(None, &base_facts()).unwrap().state, MatchState::ManualReview);
-        let f = FactSet { not_in_class: true, ..Default::default() };
+        let f = FactSet {
+            not_in_class: true,
+            ..Default::default()
+        };
         assert_eq!(evaluate(Some(&rules()), &f).unwrap().state, MatchState::NotApplicable);
     }
 

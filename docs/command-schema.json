@@ -1,0 +1,6037 @@
+{
+  "product": "OpenClaim",
+  "version": "0.1.0",
+  "schema_version": "1.1",
+  "envelope": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Envelope",
+    "description": "The single machine-readable envelope written to stdout in `--output json`.",
+    "type": "object",
+    "properties": {
+      "schema_version": {
+        "type": "string"
+      },
+      "ok": {
+        "type": "boolean"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "trace_id": {
+        "type": "string"
+      },
+      "data": true,
+      "error": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/OcError"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "pagination": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Pagination"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "audit_event_id": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "dry_run": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "schema_version",
+      "ok",
+      "request_id",
+      "trace_id"
+    ],
+    "$defs": {
+      "OcError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "$ref": "#/$defs/ErrorCode"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "retry_after": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "approval_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "needed_scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "next_action": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "details": true
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ]
+      },
+      "ErrorCode": {
+        "description": "Public error classes. Exit codes are a compatibility guarantee (MDR §22.1).",
+        "type": "string",
+        "enum": [
+          "INVALID_ARGUMENT",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "APPROVAL_REQUIRED",
+          "CONFLICT",
+          "UNAVAILABLE",
+          "TIMEOUT",
+          "POLICY_BLOCKED",
+          "PARTIAL_RESULT",
+          "INTERNAL"
+        ]
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "total": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "snapshot": {
+            "description": "Snapshot marker so pages are not mixed across refreshes.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "limit"
+        ]
+      }
+    }
+  },
+  "error": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "OcError",
+    "type": "object",
+    "properties": {
+      "code": {
+        "$ref": "#/$defs/ErrorCode"
+      },
+      "message": {
+        "type": "string"
+      },
+      "retryable": {
+        "type": "boolean"
+      },
+      "retry_after": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "format": "uint64",
+        "minimum": 0
+      },
+      "approval_id": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "needed_scopes": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "next_action": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "source_status": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "details": true
+    },
+    "required": [
+      "code",
+      "message",
+      "retryable"
+    ],
+    "$defs": {
+      "ErrorCode": {
+        "description": "Public error classes. Exit codes are a compatibility guarantee (MDR §22.1).",
+        "type": "string",
+        "enum": [
+          "INVALID_ARGUMENT",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "APPROVAL_REQUIRED",
+          "CONFLICT",
+          "UNAVAILABLE",
+          "TIMEOUT",
+          "POLICY_BLOCKED",
+          "PARTIAL_RESULT",
+          "INTERNAL"
+        ]
+      }
+    }
+  },
+  "error_codes": [
+    {
+      "code": "INVALID_ARGUMENT",
+      "exit_code": 2,
+      "http_status": 400,
+      "retryable_by_default": false
+    },
+    {
+      "code": "NOT_FOUND",
+      "exit_code": 3,
+      "http_status": 404,
+      "retryable_by_default": false
+    },
+    {
+      "code": "PERMISSION_DENIED",
+      "exit_code": 4,
+      "http_status": 403,
+      "retryable_by_default": false
+    },
+    {
+      "code": "APPROVAL_REQUIRED",
+      "exit_code": 5,
+      "http_status": 428,
+      "retryable_by_default": false
+    },
+    {
+      "code": "CONFLICT",
+      "exit_code": 6,
+      "http_status": 409,
+      "retryable_by_default": true
+    },
+    {
+      "code": "UNAVAILABLE",
+      "exit_code": 7,
+      "http_status": 503,
+      "retryable_by_default": true
+    },
+    {
+      "code": "TIMEOUT",
+      "exit_code": 8,
+      "http_status": 504,
+      "retryable_by_default": true
+    },
+    {
+      "code": "POLICY_BLOCKED",
+      "exit_code": 9,
+      "http_status": 451,
+      "retryable_by_default": false
+    },
+    {
+      "code": "PARTIAL_RESULT",
+      "exit_code": 10,
+      "http_status": 206,
+      "retryable_by_default": false
+    },
+    {
+      "code": "INTERNAL",
+      "exit_code": 11,
+      "http_status": 500,
+      "retryable_by_default": false
+    }
+  ],
+  "scopes": [
+    {
+      "scope": "discover.read",
+      "description": "Search and browse the opportunity catalog"
+    },
+    {
+      "scope": "opportunities.read",
+      "description": "Read opportunity details, rules and provenance"
+    },
+    {
+      "scope": "opportunities.write",
+      "description": "Bookmark, hide, report or curate opportunity metadata"
+    },
+    {
+      "scope": "sources.read",
+      "description": "Read source registry, health and history"
+    },
+    {
+      "scope": "sources.refresh",
+      "description": "Start compliant, rate-limited source refresh jobs"
+    },
+    {
+      "scope": "sources.manage",
+      "description": "Register, disable or import snapshots for sources"
+    },
+    {
+      "scope": "property.read",
+      "description": "Read the official unclaimed-property directory"
+    },
+    {
+      "scope": "property.track",
+      "description": "Track unclaimed-property research for a person"
+    },
+    {
+      "scope": "match.evaluate",
+      "description": "Run deterministic eligibility evaluation"
+    },
+    {
+      "scope": "jobs.read",
+      "description": "Read background job state"
+    },
+    {
+      "scope": "jobs.manage",
+      "description": "Enqueue, cancel or retry jobs"
+    },
+    {
+      "scope": "alerts.read",
+      "description": "Read deadline reminders"
+    },
+    {
+      "scope": "alerts.write",
+      "description": "Create, snooze or dismiss reminders"
+    },
+    {
+      "scope": "people.read",
+      "description": "Read claimant profiles (redacted by default)"
+    },
+    {
+      "scope": "people.read_sensitive",
+      "description": "Decrypt optional profile details (addresses, emails, phones)"
+    },
+    {
+      "scope": "people.modify",
+      "description": "Create or change claimant profiles"
+    },
+    {
+      "scope": "facts.propose",
+      "description": "Propose untrusted facts for human review"
+    },
+    {
+      "scope": "facts.review",
+      "description": "Confirm or reject proposed facts"
+    },
+    {
+      "scope": "documents.metadata",
+      "description": "List document metadata"
+    },
+    {
+      "scope": "documents.read",
+      "description": "Read bounded, redacted document excerpts"
+    },
+    {
+      "scope": "documents.import",
+      "description": "Import local files into the evidence vault"
+    },
+    {
+      "scope": "documents.delete",
+      "description": "Delete documents from the evidence vault"
+    },
+    {
+      "scope": "claims.read",
+      "description": "Read claim tracking records"
+    },
+    {
+      "scope": "claims.draft",
+      "description": "Prepare local claim packages and checklists"
+    },
+    {
+      "scope": "claims.track",
+      "description": "Record claim status changes"
+    },
+    {
+      "scope": "workflows.run",
+      "description": "Plan and run allowlisted workflows"
+    },
+    {
+      "scope": "data.export",
+      "description": "Export local records"
+    },
+    {
+      "scope": "data.wipe",
+      "description": "Wipe local data (owner only)"
+    },
+    {
+      "scope": "agents.manage",
+      "description": "Register, authorize and revoke principals (owner only)"
+    },
+    {
+      "scope": "approvals.decide",
+      "description": "Approve or deny pending actions (owner only)"
+    },
+    {
+      "scope": "audit.read",
+      "description": "Read the audit trail"
+    },
+    {
+      "scope": "config.write",
+      "description": "Change configuration"
+    },
+    {
+      "scope": "schema.read",
+      "description": "Read command and tool schemas"
+    },
+    {
+      "scope": "daemon.read",
+      "description": "Read daemon status and health"
+    },
+    {
+      "scope": "daemon.manage",
+      "description": "Stop or restart the daemon"
+    },
+    {
+      "scope": "extension.prefill",
+      "description": "Fetch user-approved prefill packages (browser extension)"
+    }
+  ],
+  "global_flags": [
+    "--profile",
+    "--output",
+    "--fields",
+    "--limit",
+    "--cursor",
+    "--timeout",
+    "--offline",
+    "--dry-run",
+    "--request-id",
+    "--idempotency-key",
+    "--non-interactive",
+    "--approval"
+  ],
+  "operations": [
+    {
+      "name": "daemon.status",
+      "scope": "daemon.read",
+      "effect": "read",
+      "summary": "Daemon version, uptime, data location and record counts",
+      "network": false,
+      "mcp_tool": "get_daemon_status",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "daemon.health",
+      "scope": "daemon.read",
+      "effect": "read",
+      "summary": "Source health, job states and explicit problems",
+      "network": false,
+      "mcp_tool": "get_source_health",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "daemon.doctor",
+      "scope": "daemon.read",
+      "effect": "read",
+      "summary": "Environment checks (storage, passphrase, contact, OCR)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "DoctorParams",
+        "type": "object"
+      }
+    },
+    {
+      "name": "daemon.logs",
+      "scope": "daemon.read",
+      "effect": "read",
+      "summary": "Recent command runs",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PageParams",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "daemon.stop",
+      "scope": "daemon.manage",
+      "effect": "owner_only",
+      "summary": "Stop the daemon; durable jobs resume on restart",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "events.poll",
+      "scope": "jobs.read",
+      "effect": "read",
+      "summary": "Read committed events after a sequence number",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "EventsParams",
+        "type": "object",
+        "properties": {
+          "after_seq": {
+            "type": "integer",
+            "format": "int64",
+            "default": 0
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "sources.list",
+      "scope": "sources.read",
+      "effect": "read",
+      "summary": "List registered sources with health",
+      "network": false,
+      "mcp_tool": "list_sources",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "sources.show",
+      "scope": "sources.read",
+      "effect": "read",
+      "summary": "Show a source, its manifest and last snapshot",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": "source_id",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "SourceIdParam",
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id"
+        ]
+      }
+    },
+    {
+      "name": "sources.health",
+      "scope": "sources.read",
+      "effect": "read",
+      "summary": "Freshness, failures and stale counts per source",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "sources.refresh",
+      "scope": "sources.refresh",
+      "effect": "write",
+      "summary": "Queue compliant refresh jobs for permitted sources",
+      "network": true,
+      "mcp_tool": "refresh_source",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RefreshParams",
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "description": "One source id; omit to refresh by scope.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "scope": {
+            "description": "`official` (Tier A), `all`.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "force": {
+            "description": "Ignore the freshness TTL.",
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "sources.test",
+      "scope": "sources.refresh",
+      "effect": "write",
+      "summary": "Queue a one-request connectivity test (nothing persisted)",
+      "network": true,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "SourceIdParam",
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id"
+        ]
+      }
+    },
+    {
+      "name": "sources.validate",
+      "scope": "sources.read",
+      "effect": "read",
+      "summary": "Validate a connector manifest against the free-only provider gate",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ManifestParam",
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "description": "Connector manifest JSON (object)."
+          }
+        },
+        "required": [
+          "manifest"
+        ]
+      }
+    },
+    {
+      "name": "sources.register",
+      "scope": "sources.manage",
+      "effect": "elevated",
+      "summary": "Register or update a connector manifest",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ManifestParam",
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "description": "Connector manifest JSON (object)."
+          }
+        },
+        "required": [
+          "manifest"
+        ]
+      }
+    },
+    {
+      "name": "sources.disable",
+      "scope": "sources.manage",
+      "effect": "elevated",
+      "summary": "Disable a source (data retained with a freshness warning)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "DisableParams",
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "source_id"
+        ]
+      }
+    },
+    {
+      "name": "sources.enable",
+      "scope": "sources.manage",
+      "effect": "elevated",
+      "summary": "Re-enable a source",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "SourceIdParam",
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id"
+        ]
+      }
+    },
+    {
+      "name": "sources.history",
+      "scope": "sources.read",
+      "effect": "read",
+      "summary": "Snapshot history for a source",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "HistoryParams",
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "source_id"
+        ]
+      }
+    },
+    {
+      "name": "sources.import_snapshot",
+      "scope": "sources.manage",
+      "effect": "elevated",
+      "summary": "Import a page you saved from the official site (for sources that block automation)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ImportSnapshotParams",
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "url": {
+            "description": "The official page URL the HTML was saved from.",
+            "type": "string"
+          },
+          "html": {
+            "description": "Page HTML (inline) …",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "file": {
+            "description": "… or a local file path to read it from.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "source_id",
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "sources.capture_from_extension",
+      "scope": "extension.prefill",
+      "effect": "write",
+      "summary": "Browser extension: capture the official page the user is viewing",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ImportSnapshotParams",
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "url": {
+            "description": "The official page URL the HTML was saved from.",
+            "type": "string"
+          },
+          "html": {
+            "description": "Page HTML (inline) …",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "file": {
+            "description": "… or a local file path to read it from.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "source_id",
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "opportunities.list",
+      "scope": "opportunities.read",
+      "effect": "read",
+      "summary": "Search and filter the catalog (typed filters or `filter` string)",
+      "network": false,
+      "mcp_tool": "discover_opportunities",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "OpportunityQuery",
+        "description": "Typed filter vocabulary (MDR §17). `filter` accepts the same keys as `key=value key=value`.",
+        "type": "object",
+        "properties": {
+          "q": {
+            "description": "Full-text query over title, administrator, summary and case number.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "status": {
+            "description": "One or more of open, upcoming, automatic_distribution, past_deadline, closed, awaiting_administrator, unknown.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "state": {
+            "description": "Jurisdiction code (e.g. CA, US).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "only_verified": {
+            "type": "boolean",
+            "default": false
+          },
+          "deadline_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "deadline_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "verified_since": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "benefit_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "claim_method": {
+            "description": "online_form, automatic, mail, unknown",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "proof_required": {
+            "description": "none, optional, required, unknown",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "administrator": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "source_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "source_health": {
+            "description": "healthy, degraded, blocked, …",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "match_state": {
+            "description": "Requires person_id: potential_match, needs_more_information, unlikely, not_applicable, manual_review.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "person_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "bookmarked": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "include_hidden": {
+            "type": "boolean",
+            "default": false
+          },
+          "include_archived": {
+            "type": "boolean",
+            "default": false
+          },
+          "sort": {
+            "description": "deadline | updated | verified | title | activity",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "filter": {
+            "description": "Compact filter string: `status=open only_verified deadline_before=2027-01-01`.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "discover.search",
+      "scope": "discover.read",
+      "effect": "read",
+      "summary": "Search the catalog (alias of opportunities.list)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "OpportunityQuery",
+        "description": "Typed filter vocabulary (MDR §17). `filter` accepts the same keys as `key=value key=value`.",
+        "type": "object",
+        "properties": {
+          "q": {
+            "description": "Full-text query over title, administrator, summary and case number.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "status": {
+            "description": "One or more of open, upcoming, automatic_distribution, past_deadline, closed, awaiting_administrator, unknown.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "state": {
+            "description": "Jurisdiction code (e.g. CA, US).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "only_verified": {
+            "type": "boolean",
+            "default": false
+          },
+          "deadline_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "deadline_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "verified_since": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "benefit_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "claim_method": {
+            "description": "online_form, automatic, mail, unknown",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "proof_required": {
+            "description": "none, optional, required, unknown",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "administrator": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "source_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "source_health": {
+            "description": "healthy, degraded, blocked, …",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "match_state": {
+            "description": "Requires person_id: potential_match, needs_more_information, unlikely, not_applicable, manual_review.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "person_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "bookmarked": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "include_hidden": {
+            "type": "boolean",
+            "default": false
+          },
+          "include_archived": {
+            "type": "boolean",
+            "default": false
+          },
+          "sort": {
+            "description": "deadline | updated | verified | title | activity",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "filter": {
+            "description": "Compact filter string: `status=open only_verified deadline_before=2027-01-01`.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "discover.new",
+      "scope": "discover.read",
+      "effect": "read",
+      "summary": "Opportunities first seen in the last N days",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "OpportunityQuery",
+        "description": "Typed filter vocabulary (MDR §17). `filter` accepts the same keys as `key=value key=value`.",
+        "type": "object",
+        "properties": {
+          "q": {
+            "description": "Full-text query over title, administrator, summary and case number.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "status": {
+            "description": "One or more of open, upcoming, automatic_distribution, past_deadline, closed, awaiting_administrator, unknown.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "state": {
+            "description": "Jurisdiction code (e.g. CA, US).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "only_verified": {
+            "type": "boolean",
+            "default": false
+          },
+          "deadline_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "deadline_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "verified_since": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "benefit_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "claim_method": {
+            "description": "online_form, automatic, mail, unknown",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "proof_required": {
+            "description": "none, optional, required, unknown",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "administrator": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "source_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "source_health": {
+            "description": "healthy, degraded, blocked, …",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "match_state": {
+            "description": "Requires person_id: potential_match, needs_more_information, unlikely, not_applicable, manual_review.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "person_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "bookmarked": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "include_hidden": {
+            "type": "boolean",
+            "default": false
+          },
+          "include_archived": {
+            "type": "boolean",
+            "default": false
+          },
+          "sort": {
+            "description": "deadline | updated | verified | title | activity",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "filter": {
+            "description": "Compact filter string: `status=open only_verified deadline_before=2027-01-01`.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "discover.trending",
+      "scope": "discover.read",
+      "effect": "read",
+      "summary": "Verified opportunities by recent official activity (deterministic)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "OpportunityQuery",
+        "description": "Typed filter vocabulary (MDR §17). `filter` accepts the same keys as `key=value key=value`.",
+        "type": "object",
+        "properties": {
+          "q": {
+            "description": "Full-text query over title, administrator, summary and case number.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "status": {
+            "description": "One or more of open, upcoming, automatic_distribution, past_deadline, closed, awaiting_administrator, unknown.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "state": {
+            "description": "Jurisdiction code (e.g. CA, US).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "only_verified": {
+            "type": "boolean",
+            "default": false
+          },
+          "deadline_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "deadline_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "verified_since": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "benefit_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "claim_method": {
+            "description": "online_form, automatic, mail, unknown",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "proof_required": {
+            "description": "none, optional, required, unknown",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "administrator": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "source_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "source_health": {
+            "description": "healthy, degraded, blocked, …",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "match_state": {
+            "description": "Requires person_id: potential_match, needs_more_information, unlikely, not_applicable, manual_review.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "person_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "bookmarked": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "include_hidden": {
+            "type": "boolean",
+            "default": false
+          },
+          "include_archived": {
+            "type": "boolean",
+            "default": false
+          },
+          "sort": {
+            "description": "deadline | updated | verified | title | activity",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "filter": {
+            "description": "Compact filter string: `status=open only_verified deadline_before=2027-01-01`.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "discover.compare",
+      "scope": "opportunities.read",
+      "effect": "read",
+      "summary": "Side-by-side comparison of opportunities",
+      "network": false,
+      "mcp_tool": "compare_opportunities",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "CompareParams",
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      }
+    },
+    {
+      "name": "discover.history",
+      "scope": "discover.read",
+      "effect": "read",
+      "summary": "Recent official changes across the catalog",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PageParams",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "discover.watch",
+      "scope": "discover.read",
+      "effect": "read",
+      "summary": "Event cursor and topics for live catalog changes",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "opportunities.show",
+      "scope": "opportunities.read",
+      "effect": "read",
+      "summary": "Full opportunity with optional rules, provenance and changes",
+      "network": false,
+      "mcp_tool": "get_opportunity",
+      "resource_param": "id",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ShowParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "include": {
+            "description": "Any of: sources, rules, provenance, changes, aliases, matches",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "opportunities.rules",
+      "scope": "opportunities.read",
+      "effect": "read",
+      "summary": "Structured eligibility rules with source citations",
+      "network": false,
+      "mcp_tool": "get_opportunity_rules",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "opportunities.set_rules",
+      "scope": "opportunities.write",
+      "effect": "elevated",
+      "summary": "Curate structured rules from quoted official text",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "SetRulesParams",
+        "type": "object",
+        "properties": {
+          "opportunity_id": {
+            "type": "string"
+          },
+          "rules": {
+            "$ref": "#/$defs/RuleSet"
+          },
+          "original_text_excerpt": {
+            "description": "Verbatim official text the rules were derived from.",
+            "type": "string"
+          },
+          "evidence_id": {
+            "description": "Evidence link id (from provenance) that holds the text, if any.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "opportunity_id",
+          "rules",
+          "original_text_excerpt"
+        ],
+        "$defs": {
+          "RuleSet": {
+            "type": "object",
+            "properties": {
+              "rules": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Rule"
+                }
+              },
+              "one_claim_per": {
+                "description": "\"person\" or \"household\" when the official terms limit claims.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "rules"
+            ]
+          },
+          "Rule": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "required": {
+                "description": "Required (hard) conditions decide `unlikely`/`needs_more_information`.",
+                "type": "boolean",
+                "default": true
+              },
+              "ambiguous": {
+                "description": "Ambiguous or complex official wording forces manual review.",
+                "type": "boolean",
+                "default": false
+              },
+              "criterion": {
+                "$ref": "#/$defs/Criterion"
+              },
+              "source_excerpt": {
+                "description": "Quoted or paraphrased official text the rule was built from.",
+                "type": "string"
+              },
+              "source_locator": {
+                "description": "URL or locator of the primary source span.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "criterion",
+              "source_excerpt",
+              "source_locator"
+            ]
+          },
+          "Criterion": {
+            "description": "A node of the criteria AST.",
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "all"
+                  },
+                  "of": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Criterion"
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "of"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "any"
+                  },
+                  "of": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Criterion"
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "of"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "not"
+                  },
+                  "of": {
+                    "$ref": "#/$defs/Criterion"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "of"
+                ]
+              },
+              {
+                "description": "Lived in one of the jurisdictions (USPS state codes or country codes) at some point in `during`.",
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "resided_in"
+                  },
+                  "jurisdictions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "during": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Interval"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "jurisdictions"
+                ]
+              },
+              {
+                "description": "Had a purchase/service/account relationship matching the filters during `during`.",
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "consumer_fact"
+                  },
+                  "fact_type": {
+                    "type": "string"
+                  },
+                  "merchant": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "product": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "during": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Interval"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "fact_type"
+                ]
+              },
+              {
+                "description": "A yes/no statement only the claimant can make (e.g. \"received a notice postcard\").",
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "attestation"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "question": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key",
+                  "question"
+                ]
+              }
+            ]
+          },
+          "Interval": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "description": "YYYY-MM-DD, inclusive. Absent means open-ended.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "end": {
+                "description": "YYYY-MM-DD, inclusive. Absent means open-ended.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "opportunities.sources",
+      "scope": "opportunities.read",
+      "effect": "read",
+      "summary": "Evidence links and snapshots behind a record",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "opportunities.changes",
+      "scope": "opportunities.read",
+      "effect": "read",
+      "summary": "Field-level change history",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "opportunities.verify",
+      "scope": "opportunities.write",
+      "effect": "elevated",
+      "summary": "Owner review: mark verified, disputed or pending",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "VerifyParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "state": {
+            "description": "verified | disputed | verification_pending",
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "note"
+        ]
+      }
+    },
+    {
+      "name": "opportunities.bookmark",
+      "scope": "opportunities.write",
+      "effect": "write",
+      "summary": "Bookmark (schedules deadline reminders)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "MarkParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "on": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "opportunities.hide",
+      "scope": "opportunities.write",
+      "effect": "write",
+      "summary": "Hide from default listings",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "MarkParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "on": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "opportunities.report",
+      "scope": "opportunities.write",
+      "effect": "write",
+      "summary": "Report an inaccurate record",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ReportParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "reason"
+        ]
+      }
+    },
+    {
+      "name": "opportunities.export",
+      "scope": "opportunities.read",
+      "effect": "read",
+      "summary": "Export search results as json, csv or markdown",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ExportParams",
+        "description": "Typed filter vocabulary (MDR §17). `filter` accepts the same keys as `key=value key=value`.",
+        "type": "object",
+        "properties": {
+          "q": {
+            "description": "Full-text query over title, administrator, summary and case number.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "status": {
+            "description": "One or more of open, upcoming, automatic_distribution, past_deadline, closed, awaiting_administrator, unknown.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "state": {
+            "description": "Jurisdiction code (e.g. CA, US).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "only_verified": {
+            "type": "boolean",
+            "default": false
+          },
+          "deadline_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "deadline_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "verified_since": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "benefit_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "claim_method": {
+            "description": "online_form, automatic, mail, unknown",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "proof_required": {
+            "description": "none, optional, required, unknown",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "administrator": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "source_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "source_health": {
+            "description": "healthy, degraded, blocked, …",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "match_state": {
+            "description": "Requires person_id: potential_match, needs_more_information, unlikely, not_applicable, manual_review.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "person_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "bookmarked": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "include_hidden": {
+            "type": "boolean",
+            "default": false
+          },
+          "include_archived": {
+            "type": "boolean",
+            "default": false
+          },
+          "sort": {
+            "description": "deadline | updated | verified | title | activity",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "filter": {
+            "description": "Compact filter string: `status=open only_verified deadline_before=2027-01-01`.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "format": {
+            "description": "json | csv | markdown",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "tips.submit",
+      "scope": "opportunities.write",
+      "effect": "write",
+      "summary": "Submit a settlement tip URL (quarantined lead)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "TipParams",
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "tips.list",
+      "scope": "opportunities.read",
+      "effect": "read",
+      "summary": "List quarantined and corroborated tips",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PageParams",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "property.states",
+      "scope": "property.read",
+      "effect": "read",
+      "summary": "Official unclaimed-property programs (50 states, DC, territories, federal, multi-state)",
+      "network": false,
+      "mcp_tool": "list_property_programs",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "StatesParams",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "us_state, us_territory, multi_state, federal, canada, other",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "property.official_links",
+      "scope": "property.read",
+      "effect": "read",
+      "summary": "Official search links for given jurisdictions",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "LinksParams",
+        "type": "object",
+        "properties": {
+          "jurisdictions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "jurisdictions"
+        ]
+      }
+    },
+    {
+      "name": "property.checklist",
+      "scope": "property.track",
+      "effect": "read",
+      "summary": "Private per-person search checklist from residence history",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PersonParam",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "person_id"
+        ]
+      }
+    },
+    {
+      "name": "property.research",
+      "scope": "property.track",
+      "effect": "write",
+      "summary": "Create to-search tracking rows for every state in the residence history",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PersonParam",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "person_id"
+        ]
+      }
+    },
+    {
+      "name": "property.track",
+      "scope": "property.track",
+      "effect": "write",
+      "summary": "Record a user-entered search result or claim status",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "TrackParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "jurisdiction": {
+            "type": "string"
+          },
+          "status": {
+            "description": "to_search, searched_no_match, possible_match, claim_started, claim_submitted, paid, not_mine",
+            "type": "string"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "heir_claim": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "expected_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "default": null
+          }
+        },
+        "required": [
+          "person_id",
+          "jurisdiction",
+          "status"
+        ]
+      }
+    },
+    {
+      "name": "property.history",
+      "scope": "property.track",
+      "effect": "read",
+      "summary": "Tracking rows and events for a person",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PersonParam",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "person_id"
+        ]
+      }
+    },
+    {
+      "name": "property.heir_checklist",
+      "scope": "property.read",
+      "effect": "read",
+      "summary": "Guided checklist for heirs' claims",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "people.list",
+      "scope": "people.read",
+      "effect": "read",
+      "summary": "List claimant profiles (names only)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PageParams",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "people.show",
+      "scope": "people.read",
+      "effect": "read",
+      "summary": "Show a profile; sensitive details need people.read_sensitive",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": "id",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "people.create",
+      "scope": "people.modify",
+      "effect": "elevated",
+      "summary": "Create a claimant profile",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "CreateParams",
+        "type": "object",
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/PersonDetails"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "consent": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ConsentFlags"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "$defs": {
+          "PersonDetails": {
+            "description": "Optional sensitive details. No SSN or bank fields exist by design.",
+            "type": "object",
+            "properties": {
+              "aliases": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "emails": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "phones": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "mailing_address": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "employers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "purchase_categories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "memberships": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "notes": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            }
+          },
+          "ConsentFlags": {
+            "type": "object",
+            "properties": {
+              "authorized_by_adult": {
+                "description": "This adult explicitly authorized handling their submissions.",
+                "type": "boolean",
+                "default": false
+              },
+              "recorded_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "people.update",
+      "scope": "people.modify",
+      "effect": "elevated",
+      "summary": "Update name or details (optimistic version)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "UpdateParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "details": {
+            "description": "Replaces the stored details entirely.",
+            "anyOf": [
+              {
+                "$ref": "#/$defs/PersonDetails"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "expected_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "default": null
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$defs": {
+          "PersonDetails": {
+            "description": "Optional sensitive details. No SSN or bank fields exist by design.",
+            "type": "object",
+            "properties": {
+              "aliases": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "emails": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "phones": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "mailing_address": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "employers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "purchase_categories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "memberships": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "notes": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "people.residences",
+      "scope": "people.read",
+      "effect": "read",
+      "summary": "Residence timeline",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "people.add_residence",
+      "scope": "people.modify",
+      "effect": "elevated",
+      "summary": "Add a residence period",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ResidenceParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "jurisdiction": {
+            "description": "State/country code, e.g. CA, NY, US, CA-BC.",
+            "type": "string"
+          },
+          "start": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "end": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "person_id",
+          "jurisdiction"
+        ]
+      }
+    },
+    {
+      "name": "people.remove_residence",
+      "scope": "people.modify",
+      "effect": "elevated",
+      "summary": "Remove a residence period",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "people.consent",
+      "scope": "people.modify",
+      "effect": "elevated",
+      "summary": "Record the adult's explicit authorization",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ConsentParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "authorized_by_adult": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "person_id",
+          "authorized_by_adult"
+        ]
+      }
+    },
+    {
+      "name": "people.history",
+      "scope": "people.read",
+      "effect": "read",
+      "summary": "Claims, matches and audit entries for a person",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": "id",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "people.delete",
+      "scope": "people.modify",
+      "effect": "elevated",
+      "summary": "Hard-delete a person and everything linked to them",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "DeleteParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "confirm": {
+            "description": "Must be true: this permanently removes the person, their facts, claims and matches.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "confirm"
+        ]
+      }
+    },
+    {
+      "name": "facts.list",
+      "scope": "people.read",
+      "effect": "read",
+      "summary": "Human-confirmed consumer facts for a person",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PageParams",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "facts.add",
+      "scope": "people.modify",
+      "effect": "elevated",
+      "summary": "Assert a fact as the claimant (humans only)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "AddParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "fact_type": {
+            "description": "purchase, subscription, account, service, vehicle, employment, residence_event, other",
+            "type": "string"
+          },
+          "merchant": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "product": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "start": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "end": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "positive": {
+            "description": "false records \"this did not happen\".",
+            "type": "boolean",
+            "default": true
+          },
+          "proof_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "person_id",
+          "fact_type"
+        ]
+      }
+    },
+    {
+      "name": "facts.propose",
+      "scope": "facts.propose",
+      "effect": "write",
+      "summary": "Propose a fact for human review (never used until confirmed)",
+      "network": false,
+      "mcp_tool": "propose_fact",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ProposeParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "document_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "proposal": {
+            "$ref": "#/$defs/FactInput"
+          },
+          "evidence_locator": {
+            "description": "Where in the document the fact appears (e.g. \"chars 120-180\" or \"page 2\").",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "person_id",
+          "proposal"
+        ],
+        "$defs": {
+          "FactInput": {
+            "type": "object",
+            "properties": {
+              "fact_type": {
+                "description": "purchase, subscription, account, service, vehicle, employment, residence_event, other",
+                "type": "string"
+              },
+              "merchant": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "product": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "start": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "end": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "positive": {
+                "description": "false records \"this did not happen\".",
+                "type": "boolean",
+                "default": true
+              }
+            },
+            "required": [
+              "fact_type"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "facts.validate",
+      "scope": "facts.propose",
+      "effect": "read",
+      "summary": "Deterministic checks of a proposal against its document",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "facts.confirm",
+      "scope": "facts.review",
+      "effect": "elevated",
+      "summary": "Confirm a proposal, creating a human-confirmed fact",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "facts.reject",
+      "scope": "facts.review",
+      "effect": "elevated",
+      "summary": "Reject a proposal",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "facts.link_proof",
+      "scope": "people.modify",
+      "effect": "elevated",
+      "summary": "Link a vault document as proof of a fact",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "LinkProofParams",
+        "type": "object",
+        "properties": {
+          "fact_id": {
+            "type": "string"
+          },
+          "document_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact_id",
+          "document_id"
+        ]
+      }
+    },
+    {
+      "name": "facts.remove",
+      "scope": "people.modify",
+      "effect": "elevated",
+      "summary": "Remove a confirmed fact",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "facts.attest",
+      "scope": "people.modify",
+      "effect": "elevated",
+      "summary": "Answer a yes/no eligibility question for an opportunity",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "AttestParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "opportunity_id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "person_id",
+          "opportunity_id",
+          "key",
+          "value"
+        ]
+      }
+    },
+    {
+      "name": "facts.exclude",
+      "scope": "people.modify",
+      "effect": "elevated",
+      "summary": "Record that the person is not part of a class",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ExcludeParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "opportunity_id": {
+            "type": "string"
+          },
+          "not_in_class": {
+            "description": "true = \"I was not part of this class\"; false clears it.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "person_id",
+          "opportunity_id",
+          "not_in_class"
+        ]
+      }
+    },
+    {
+      "name": "facts.history",
+      "scope": "people.read",
+      "effect": "read",
+      "summary": "Proposals and attestations for a person",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "documents.import",
+      "scope": "documents.import",
+      "effect": "elevated",
+      "summary": "Import a local file into the encrypted vault and queue extraction",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ImportParams",
+        "type": "object",
+        "properties": {
+          "file": {
+            "description": "Local file path (PDF, PNG/JPG/TIFF, CSV, EML, MBOX, TXT).",
+            "type": "string"
+          },
+          "person_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "file"
+        ]
+      }
+    },
+    {
+      "name": "documents.list",
+      "scope": "documents.metadata",
+      "effect": "read",
+      "summary": "List vault documents (metadata only)",
+      "network": false,
+      "mcp_tool": "list_document_metadata",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PageParams",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "documents.show",
+      "scope": "documents.metadata",
+      "effect": "read",
+      "summary": "Document metadata, extraction state and links",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": "id",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "documents.extract",
+      "scope": "documents.import",
+      "effect": "write",
+      "summary": "Re-run on-device extraction",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "documents.suggestions",
+      "scope": "documents.read",
+      "effect": "read",
+      "summary": "Deterministic fact suggestions with source spans",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": "id",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "documents.search",
+      "scope": "documents.read",
+      "effect": "read",
+      "summary": "Local full-text search over redacted extracted text",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "SearchParams",
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string"
+          },
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "q"
+        ]
+      }
+    },
+    {
+      "name": "documents.excerpt",
+      "scope": "documents.read",
+      "effect": "read",
+      "summary": "Bounded, redacted excerpt of extracted text",
+      "network": false,
+      "mcp_tool": "read_document_excerpt",
+      "resource_param": "id",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ExcerptParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0,
+            "default": 0
+          },
+          "length": {
+            "description": "Characters to return (max 4000).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint",
+            "minimum": 0,
+            "default": null
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "documents.link",
+      "scope": "documents.metadata",
+      "effect": "write",
+      "summary": "Link a document to a claim, fact, opportunity or person",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "LinkParams",
+        "type": "object",
+        "properties": {
+          "document_id": {
+            "type": "string"
+          },
+          "target_kind": {
+            "description": "claim | fact | opportunity | person",
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          },
+          "locator": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "document_id",
+          "target_kind",
+          "target_id"
+        ]
+      }
+    },
+    {
+      "name": "documents.redact",
+      "scope": "documents.import",
+      "effect": "write",
+      "summary": "Re-apply identifier redaction to the indexed text",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "documents.export",
+      "scope": "data.export",
+      "effect": "elevated",
+      "summary": "Decrypt a document to a path you choose",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ExportParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "to": {
+            "description": "Destination path for the decrypted original.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "documents.delete",
+      "scope": "documents.delete",
+      "effect": "elevated",
+      "summary": "Permanently delete a document and its index",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "DeleteParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "confirm": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "confirm"
+        ]
+      }
+    },
+    {
+      "name": "match.evaluate",
+      "scope": "match.evaluate",
+      "effect": "write",
+      "summary": "Deterministic eligibility evaluation; persists results",
+      "network": false,
+      "mcp_tool": "evaluate_match",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "EvaluateParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "opportunity_id": {
+            "description": "Omit to evaluate every verified opportunity.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "person_id"
+        ]
+      }
+    },
+    {
+      "name": "match.explain",
+      "scope": "match.evaluate",
+      "effect": "read",
+      "summary": "Why a person matched (or not), with cited rules",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PairParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "opportunity_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "person_id",
+          "opportunity_id"
+        ]
+      }
+    },
+    {
+      "name": "match.list",
+      "scope": "match.evaluate",
+      "effect": "read",
+      "summary": "Stored match states for a person",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PersonParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "state": {
+            "description": "Filter by state (potential_match, needs_more_information, …)",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "person_id"
+        ]
+      }
+    },
+    {
+      "name": "match.missing",
+      "scope": "match.evaluate",
+      "effect": "read",
+      "summary": "Questions that would resolve needs_more_information matches",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PersonParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "state": {
+            "description": "Filter by state (potential_match, needs_more_information, …)",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "person_id"
+        ]
+      }
+    },
+    {
+      "name": "match.refresh",
+      "scope": "match.evaluate",
+      "effect": "write",
+      "summary": "Queue a re-evaluation job",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "match.compare",
+      "scope": "match.evaluate",
+      "effect": "read",
+      "summary": "Compare several opportunities for one person",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "CompareParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "opportunity_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "person_id",
+          "opportunity_ids"
+        ]
+      }
+    },
+    {
+      "name": "match.export",
+      "scope": "match.evaluate",
+      "effect": "read",
+      "summary": "Export match states as CSV",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PersonParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "state": {
+            "description": "Filter by state (potential_match, needs_more_information, …)",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "person_id"
+        ]
+      }
+    },
+    {
+      "name": "claims.list",
+      "scope": "claims.read",
+      "effect": "read",
+      "summary": "List claim tracking records",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PageParams",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "claims.show",
+      "scope": "claims.read",
+      "effect": "read",
+      "summary": "Claim with events, documents and packages",
+      "network": false,
+      "mcp_tool": "get_claim_status",
+      "resource_param": "id",
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "claims.init",
+      "scope": "claims.track",
+      "effect": "write",
+      "summary": "Start tracking a claim for a person",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "InitParams",
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "opportunity_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "person_id",
+          "opportunity_id"
+        ]
+      }
+    },
+    {
+      "name": "claims.checklist",
+      "scope": "claims.read",
+      "effect": "read",
+      "summary": "Eligibility checklist, warnings and missing proof",
+      "network": false,
+      "mcp_tool": "get_claim_checklist",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "claims.prepare",
+      "scope": "claims.draft",
+      "effect": "elevated",
+      "summary": "Build a local claim package (never submitted externally)",
+      "network": false,
+      "mcp_tool": "prepare_claim_draft",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PrepareParams",
+        "type": "object",
+        "properties": {
+          "claim_id": {
+            "type": "string"
+          },
+          "prefill_fields": {
+            "description": "Non-sensitive fields to include for prefill: name, email, phone, mailing_address.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "expected_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "default": null
+          }
+        },
+        "required": [
+          "claim_id"
+        ]
+      }
+    },
+    {
+      "name": "claims.handoff",
+      "scope": "claims.track",
+      "effect": "write",
+      "summary": "Open the official site: the user completes and submits",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "claims.record_submission",
+      "scope": "claims.track",
+      "effect": "write",
+      "summary": "Record that you submitted on the official site",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RecordSubmissionParams",
+        "type": "object",
+        "properties": {
+          "claim_id": {
+            "type": "string"
+          },
+          "confirmation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "document_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "user_confirmed": {
+            "description": "You confirm the claim was really submitted on the official site.",
+            "type": "boolean"
+          },
+          "expected_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "default": null
+          }
+        },
+        "required": [
+          "claim_id",
+          "user_confirmed"
+        ]
+      }
+    },
+    {
+      "name": "claims.update",
+      "scope": "claims.track",
+      "effect": "write",
+      "summary": "Record a status change with evidence",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "UpdateParams",
+        "type": "object",
+        "properties": {
+          "claim_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "user_confirmed": {
+            "type": "boolean",
+            "default": false
+          },
+          "confirmation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "document_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "amount_minor": {
+            "description": "Integer minor units for `paid`.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "default": null
+          },
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "expected_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "default": null
+          }
+        },
+        "required": [
+          "claim_id",
+          "status"
+        ]
+      }
+    },
+    {
+      "name": "claims.history",
+      "scope": "claims.read",
+      "effect": "read",
+      "summary": "Claim event history",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "claims.export",
+      "scope": "claims.read",
+      "effect": "read",
+      "summary": "Export claims as json, csv or markdown",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "claims.ledger",
+      "scope": "claims.read",
+      "effect": "read",
+      "summary": "Recovered amounts ledger",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "claims.prefill_package",
+      "scope": "extension.prefill",
+      "effect": "read",
+      "summary": "Release user-approved prefill values for the allowed domain",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PackageParams",
+        "type": "object",
+        "properties": {
+          "package_id": {
+            "type": "string"
+          },
+          "origin": {
+            "description": "The page origin the extension is on (https://host).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "package_id"
+        ]
+      }
+    },
+    {
+      "name": "alerts.list",
+      "scope": "alerts.read",
+      "effect": "read",
+      "summary": "Upcoming reminders and change alerts",
+      "network": false,
+      "mcp_tool": "list_alerts",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ListParams",
+        "type": "object",
+        "properties": {
+          "due_within_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "include_dismissed": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "alerts.due",
+      "scope": "alerts.read",
+      "effect": "read",
+      "summary": "Reminders due now",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "alerts.add",
+      "scope": "alerts.write",
+      "effect": "write",
+      "summary": "Add a custom reminder",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "AddParams",
+        "type": "object",
+        "properties": {
+          "subject_kind": {
+            "description": "opportunity | claim | property | custom",
+            "type": "string"
+          },
+          "subject_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "title": {
+            "type": "string"
+          },
+          "due_at": {
+            "description": "RFC 3339 timestamp or YYYY-MM-DD.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_kind",
+          "title",
+          "due_at"
+        ]
+      }
+    },
+    {
+      "name": "alerts.snooze",
+      "scope": "alerts.write",
+      "effect": "write",
+      "summary": "Snooze a reminder",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "SnoozeParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "until": {
+            "description": "RFC 3339 timestamp or YYYY-MM-DD.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "until"
+        ]
+      }
+    },
+    {
+      "name": "alerts.dismiss",
+      "scope": "alerts.write",
+      "effect": "write",
+      "summary": "Dismiss a reminder",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "alerts.export_ics",
+      "scope": "alerts.read",
+      "effect": "read",
+      "summary": "Export reminders as an iCalendar file",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IcsParams",
+        "type": "object",
+        "properties": {
+          "path": {
+            "description": "Optional path to write the .ics file to.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "jobs.list",
+      "scope": "jobs.read",
+      "effect": "read",
+      "summary": "List jobs (agents see their own)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PageParams",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "jobs.show",
+      "scope": "jobs.read",
+      "effect": "read",
+      "summary": "Job state, progress, result and next action",
+      "network": false,
+      "mcp_tool": "get_job",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "JobIdParam",
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    },
+    {
+      "name": "jobs.enqueue",
+      "scope": "jobs.manage",
+      "effect": "write",
+      "summary": "Queue a job by kind",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "EnqueueParams",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "params": {
+            "default": null
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      }
+    },
+    {
+      "name": "jobs.watch",
+      "scope": "jobs.read",
+      "effect": "read",
+      "summary": "Job plus events after a sequence (poll for streaming)",
+      "network": false,
+      "mcp_tool": "watch_job",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "WatchParams",
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "after_sequence": {
+            "type": "integer",
+            "format": "int64",
+            "default": 0
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    },
+    {
+      "name": "jobs.cancel",
+      "scope": "jobs.manage",
+      "effect": "write",
+      "summary": "Cancel a queued/paused job or request cancellation of a running one",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "JobIdParam",
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    },
+    {
+      "name": "jobs.retry",
+      "scope": "jobs.manage",
+      "effect": "write",
+      "summary": "Requeue a failed, cancelled or paused job",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "JobIdParam",
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    },
+    {
+      "name": "jobs.history",
+      "scope": "jobs.read",
+      "effect": "read",
+      "summary": "All events for a job",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "JobIdParam",
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    },
+    {
+      "name": "jobs.kinds",
+      "scope": "jobs.read",
+      "effect": "read",
+      "summary": "Known job kinds",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "workflows.list",
+      "scope": "workflows.run",
+      "effect": "read",
+      "summary": "Registered workflows",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "workflows.validate",
+      "scope": "workflows.run",
+      "effect": "read",
+      "summary": "Validate a workflow definition (JSON/YAML)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "DefinitionParam",
+        "type": "object",
+        "properties": {
+          "definition": {
+            "description": "Workflow definition (JSON object) …",
+            "default": null
+          },
+          "text": {
+            "description": "… or YAML/JSON text …",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "name": {
+            "description": "… or a registered workflow name.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "workflows.register",
+      "scope": "workflows.run",
+      "effect": "write",
+      "summary": "Register or replace a workflow by name",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "DefinitionParam",
+        "type": "object",
+        "properties": {
+          "definition": {
+            "description": "Workflow definition (JSON object) …",
+            "default": null
+          },
+          "text": {
+            "description": "… or YAML/JSON text …",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "name": {
+            "description": "… or a registered workflow name.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "workflows.plan",
+      "scope": "workflows.run",
+      "effect": "read",
+      "summary": "Preview order, scopes, network use and approval gates",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "DefinitionParam",
+        "type": "object",
+        "properties": {
+          "definition": {
+            "description": "Workflow definition (JSON object) …",
+            "default": null
+          },
+          "text": {
+            "description": "… or YAML/JSON text …",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "name": {
+            "description": "… or a registered workflow name.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "workflows.run",
+      "scope": "workflows.run",
+      "effect": "write",
+      "summary": "Start a durable run (returns job id)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RunParams",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "detach": {
+            "description": "Return immediately with the job id (always true; runs are durable).",
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "workflows.resume",
+      "scope": "workflows.run",
+      "effect": "write",
+      "summary": "Resume a paused or failed run from its checkpoint",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RunIdParam",
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "workflows.status",
+      "scope": "workflows.run",
+      "effect": "read",
+      "summary": "Run state and checkpoint",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RunIdParam",
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "workflows.cancel",
+      "scope": "workflows.run",
+      "effect": "write",
+      "summary": "Cancel a run",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RunIdParam",
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "workflows.export",
+      "scope": "workflows.run",
+      "effect": "read",
+      "summary": "Export a workflow as YAML",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "owner.init",
+      "scope": "schema.read",
+      "effect": "write",
+      "summary": "Set the owner passphrase on first run",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PassphraseParam",
+        "type": "object",
+        "properties": {
+          "passphrase": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "passphrase"
+        ]
+      }
+    },
+    {
+      "name": "owner.unlock",
+      "scope": "schema.read",
+      "effect": "write",
+      "summary": "Prove the passphrase; returns a memory-only session",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "UnlockParams",
+        "type": "object",
+        "properties": {
+          "passphrase": {
+            "type": "string"
+          },
+          "ttl_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0,
+            "default": null
+          }
+        },
+        "required": [
+          "passphrase"
+        ]
+      }
+    },
+    {
+      "name": "owner.lock",
+      "scope": "schema.read",
+      "effect": "write",
+      "summary": "End the current owner session",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "owner.set_passphrase",
+      "scope": "agents.manage",
+      "effect": "owner_only",
+      "summary": "Change the owner passphrase",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "SetPassphraseParams",
+        "type": "object",
+        "properties": {
+          "current": {
+            "type": "string"
+          },
+          "new": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "current",
+          "new"
+        ]
+      }
+    },
+    {
+      "name": "owner.status",
+      "scope": "schema.read",
+      "effect": "read",
+      "summary": "Who the daemon thinks you are",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "agents.register",
+      "scope": "agents.manage",
+      "effect": "owner_only",
+      "summary": "Register a named agent or extension principal; shows the token once",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RegisterParams",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expires_in_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "kind": {
+            "description": "agent | extension",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "allowed_origin": {
+            "description": "For extensions: the allowed origin (chrome-extension://id).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "scopes"
+        ]
+      }
+    },
+    {
+      "name": "agents.list",
+      "scope": "agents.manage",
+      "effect": "owner_only",
+      "summary": "List principals",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "agents.show",
+      "scope": "agents.manage",
+      "effect": "owner_only",
+      "summary": "Principal details, sessions and pending approvals",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "agents.authorize",
+      "scope": "agents.manage",
+      "effect": "owner_only",
+      "summary": "Add or remove scopes",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "AuthorizeParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "add_scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "remove_scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "agents.scopes",
+      "scope": "schema.read",
+      "effect": "read",
+      "summary": "All capability scopes",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "agents.sessions",
+      "scope": "agents.manage",
+      "effect": "owner_only",
+      "summary": "Active agent and owner sessions",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "agents.revoke",
+      "scope": "agents.manage",
+      "effect": "owner_only",
+      "summary": "Revoke a principal and cancel its queued work",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "agents.audit",
+      "scope": "agents.manage",
+      "effect": "owner_only",
+      "summary": "What an agent ran, read and proposed",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "approvals.list",
+      "scope": "jobs.read",
+      "effect": "read",
+      "summary": "Pending and decided approvals (agents see their own)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PageParams",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "approvals.show",
+      "scope": "jobs.read",
+      "effect": "read",
+      "summary": "Approval preview and state",
+      "network": false,
+      "mcp_tool": "get_approval_status",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "approvals.request",
+      "scope": "jobs.read",
+      "effect": "write",
+      "summary": "Agent: request a human decision for a named action",
+      "network": false,
+      "mcp_tool": "request_approval",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RequestApprovalParams",
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string"
+          },
+          "params": {
+            "default": null
+          }
+        },
+        "required": [
+          "op"
+        ]
+      }
+    },
+    {
+      "name": "approvals.approve",
+      "scope": "approvals.decide",
+      "effect": "owner_only",
+      "summary": "Approve the exact action (digest-bound)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "DecideParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "approvals.deny",
+      "scope": "approvals.decide",
+      "effect": "owner_only",
+      "summary": "Deny an approval",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "DecideParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "approvals.expire",
+      "scope": "approvals.decide",
+      "effect": "owner_only",
+      "summary": "Expire overdue approvals now",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "audit.list",
+      "scope": "audit.read",
+      "effect": "read",
+      "summary": "Audit trail (newest first)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PageParams",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Page size (1-500). Default 50.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0,
+            "default": null
+          },
+          "cursor": {
+            "description": "Opaque cursor from a previous page.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "audit.show",
+      "scope": "audit.read",
+      "effect": "read",
+      "summary": "One audit entry",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "audit.verify",
+      "scope": "audit.read",
+      "effect": "read",
+      "summary": "Verify the audit hash chain",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "audit.export",
+      "scope": "audit.read",
+      "effect": "read",
+      "summary": "Export audit log, command runs and disclosures",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "data.backup",
+      "scope": "data.export",
+      "effect": "elevated",
+      "summary": "Consistent copy of the database plus encrypted vault files",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PathParam",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "data.restore",
+      "scope": "data.wipe",
+      "effect": "owner_only",
+      "summary": "Replace the live database with a backup",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RestoreParams",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "confirm": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "confirm"
+        ]
+      }
+    },
+    {
+      "name": "data.export",
+      "scope": "data.export",
+      "effect": "elevated",
+      "summary": "Export your records (json, csv, markdown)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ExportParams",
+        "type": "object",
+        "properties": {
+          "format": {
+            "description": "json | csv | markdown",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "path": {
+            "description": "Directory (csv) or file path (json/markdown) to write to; omitted = inline.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      }
+    },
+    {
+      "name": "data.import",
+      "scope": "data.wipe",
+      "effect": "owner_only",
+      "summary": "Import a JSON export",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ImportParams",
+        "type": "object",
+        "properties": {
+          "path": {
+            "description": "Path to a JSON export produced by data.export.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "data.integrity",
+      "scope": "daemon.read",
+      "effect": "read",
+      "summary": "Database, vault and audit-chain checks",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "data.wipe",
+      "scope": "data.wipe",
+      "effect": "owner_only",
+      "summary": "Erase local personal data (confirm=WIPE)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "WipeParams",
+        "type": "object",
+        "properties": {
+          "confirm": {
+            "description": "Must be the literal string WIPE.",
+            "type": "string"
+          },
+          "include_catalog": {
+            "description": "Also remove the downloaded catalog and source snapshots.",
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "confirm"
+        ]
+      }
+    },
+    {
+      "name": "config.show",
+      "scope": "daemon.read",
+      "effect": "read",
+      "summary": "Show every configuration key with its value, default and description",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "config.get",
+      "scope": "daemon.read",
+      "effect": "read",
+      "summary": "Get one configuration value",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "KeyParam",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ]
+      }
+    },
+    {
+      "name": "config.set",
+      "scope": "config.write",
+      "effect": "elevated",
+      "summary": "Set a configuration value",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "SetParam",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": true
+        },
+        "required": [
+          "key",
+          "value"
+        ]
+      }
+    },
+    {
+      "name": "config.validate",
+      "scope": "daemon.read",
+      "effect": "read",
+      "summary": "Validate stored configuration",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "config.reset",
+      "scope": "config.write",
+      "effect": "elevated",
+      "summary": "Reset a key (or '*' for all) to defaults",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "KeyParam",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ]
+      }
+    },
+    {
+      "name": "schema.export",
+      "scope": "schema.read",
+      "effect": "read",
+      "summary": "Full machine-readable contract: envelope, errors, scopes, operations",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "schema.commands",
+      "scope": "schema.read",
+      "effect": "read",
+      "summary": "Operation names, scopes, effects and summaries",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "schema.describe",
+      "scope": "schema.read",
+      "effect": "read",
+      "summary": "One operation's parameter schema",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "OpParam",
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "op"
+        ]
+      }
+    },
+    {
+      "name": "schema.version",
+      "scope": "schema.read",
+      "effect": "read",
+      "summary": "Product and contract versions",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Empty",
+        "type": "object"
+      }
+    },
+    {
+      "name": "schema.validate",
+      "scope": "schema.read",
+      "effect": "read",
+      "summary": "Validate parameters against an operation's schema",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ValidateParams",
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string"
+          },
+          "params": {
+            "default": null
+          }
+        },
+        "required": [
+          "op"
+        ]
+      }
+    }
+  ],
+  "rules_ast": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "RuleSet",
+    "type": "object",
+    "properties": {
+      "rules": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Rule"
+        }
+      },
+      "one_claim_per": {
+        "description": "\"person\" or \"household\" when the official terms limit claims.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "rules"
+    ],
+    "$defs": {
+      "Rule": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "required": {
+            "description": "Required (hard) conditions decide `unlikely`/`needs_more_information`.",
+            "type": "boolean",
+            "default": true
+          },
+          "ambiguous": {
+            "description": "Ambiguous or complex official wording forces manual review.",
+            "type": "boolean",
+            "default": false
+          },
+          "criterion": {
+            "$ref": "#/$defs/Criterion"
+          },
+          "source_excerpt": {
+            "description": "Quoted or paraphrased official text the rule was built from.",
+            "type": "string"
+          },
+          "source_locator": {
+            "description": "URL or locator of the primary source span.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "criterion",
+          "source_excerpt",
+          "source_locator"
+        ]
+      },
+      "Criterion": {
+        "description": "A node of the criteria AST.",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "all"
+              },
+              "of": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Criterion"
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "of"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "any"
+              },
+              "of": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Criterion"
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "of"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "not"
+              },
+              "of": {
+                "$ref": "#/$defs/Criterion"
+              }
+            },
+            "required": [
+              "kind",
+              "of"
+            ]
+          },
+          {
+            "description": "Lived in one of the jurisdictions (USPS state codes or country codes) at some point in `during`.",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "resided_in"
+              },
+              "jurisdictions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "during": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Interval"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "jurisdictions"
+            ]
+          },
+          {
+            "description": "Had a purchase/service/account relationship matching the filters during `during`.",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "consumer_fact"
+              },
+              "fact_type": {
+                "type": "string"
+              },
+              "merchant": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "product": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "during": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Interval"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "fact_type"
+            ]
+          },
+          {
+            "description": "A yes/no statement only the claimant can make (e.g. \"received a notice postcard\").",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "attestation"
+              },
+              "key": {
+                "type": "string"
+              },
+              "question": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "key",
+              "question"
+            ]
+          }
+        ]
+      },
+      "Interval": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "description": "YYYY-MM-DD, inclusive. Absent means open-ended.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "end": {
+            "description": "YYYY-MM-DD, inclusive. Absent means open-ended.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "claim_statuses": [
+    "discovered",
+    "reviewing",
+    "possibly_eligible",
+    "proof_needed",
+    "ready",
+    "opened_official_form",
+    "submitted",
+    "pending",
+    "approved",
+    "denied",
+    "paid",
+    "withdrawn",
+    "expired"
+  ],
+  "match_states": [
+    "potential_match",
+    "needs_more_information",
+    "unlikely",
+    "not_applicable",
+    "manual_review"
+  ]
+}

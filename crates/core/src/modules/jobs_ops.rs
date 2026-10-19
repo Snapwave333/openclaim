@@ -41,11 +41,19 @@ pub struct JobIdParam {
 }
 
 pub fn load(ctx: &Ctx<'_>, id: &str) -> OcResult<Value> {
-    let row = require(query_one(ctx.conn, "SELECT id, kind, state, progress, params_json, result_json, owner_actor_id, parent_job_id, next_run_at, attempts, max_attempts, cancel_requested, error_code, error_message, created_at, updated_at, finished_at FROM jobs WHERE id = ?1", [id])?, "job", id)?;
-    if let Some(o) = visible(ctx) {
-        if row["owner_actor_id"] != o {
-            return Err(OcError::not_found(format!("job '{id}' not found")));
-        }
+    let row = require(
+        query_one(
+            ctx.conn,
+            "SELECT id, kind, state, progress, params_json, result_json, owner_actor_id, parent_job_id, next_run_at, attempts, max_attempts, cancel_requested, error_code, error_message, created_at, updated_at, finished_at FROM jobs WHERE id = ?1",
+            [id],
+        )?,
+        "job",
+        id,
+    )?;
+    if let Some(o) = visible(ctx)
+        && row["owner_actor_id"] != o
+    {
+        return Err(OcError::not_found(format!("job '{id}' not found")));
     }
     let mut row = row;
     if let Some(r) = row["result"].as_str() {
@@ -94,7 +102,11 @@ pub struct WatchParams {
 fn op_watch(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: WatchParams = parse_params(p)?;
     let job = load(ctx, &p.job_id)?;
-    let events = query_all(ctx.conn, "SELECT sequence, event_type AS event, payload_redacted_json, at FROM job_events WHERE job_id = ?1 AND sequence > ?2 ORDER BY sequence", (&p.job_id, p.after_sequence))?;
+    let events = query_all(
+        ctx.conn,
+        "SELECT sequence, event_type AS event, payload_redacted_json, at FROM job_events WHERE job_id = ?1 AND sequence > ?2 ORDER BY sequence",
+        (&p.job_id, p.after_sequence),
+    )?;
     let terminal = matches!(job["state"].as_str(), Some("succeeded") | Some("failed") | Some("cancelled"));
     Ok(json!({"job": job, "events": events, "terminal": terminal}))
 }
@@ -104,13 +116,25 @@ fn op_cancel(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let job = load(ctx, &p.job_id)?;
     match job["state"].as_str() {
         Some("queued") | Some("paused_for_approval") => {
-            exec(ctx.conn, "UPDATE jobs SET state = 'cancelled', cancel_requested = 1, finished_at = ?2, updated_at = ?2 WHERE id = ?1", (&p.job_id, &ctx.now))?;
+            exec(
+                ctx.conn,
+                "UPDATE jobs SET state = 'cancelled', cancel_requested = 1, finished_at = ?2, updated_at = ?2 WHERE id = ?1",
+                (&p.job_id, &ctx.now),
+            )?;
             crate::jobs::job_event(ctx.conn, &p.job_id, "job.cancelled", json!({}), &ctx.now)?;
-            exec(ctx.conn, "UPDATE workflow_runs SET state = 'cancelled', updated_at = ?2 WHERE job_id = ?1", (&p.job_id, &ctx.now))?;
+            exec(
+                ctx.conn,
+                "UPDATE workflow_runs SET state = 'cancelled', updated_at = ?2 WHERE job_id = ?1",
+                (&p.job_id, &ctx.now),
+            )?;
             Ok(json!({"job_id": p.job_id, "state": "cancelled"}))
         }
         Some("running") => {
-            exec(ctx.conn, "UPDATE jobs SET cancel_requested = 1, updated_at = ?2 WHERE id = ?1", (&p.job_id, &ctx.now))?;
+            exec(
+                ctx.conn,
+                "UPDATE jobs SET cancel_requested = 1, updated_at = ?2 WHERE id = ?1",
+                (&p.job_id, &ctx.now),
+            )?;
             Ok(json!({"job_id": p.job_id, "state": "running", "cancel_requested": true, "note": "stops at the next cancellation point"}))
         }
         other => Err(OcError::conflict(format!("job is {}", other.unwrap_or("unknown")))),
@@ -122,20 +146,33 @@ fn op_retry(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let job = load(ctx, &p.job_id)?;
     match job["state"].as_str() {
         Some("failed") | Some("cancelled") | Some("paused_for_approval") => {
-            exec(ctx.conn, "UPDATE jobs SET state = 'queued', cancel_requested = 0, next_run_at = ?2, error_code = NULL, error_message = NULL, finished_at = NULL, updated_at = ?2, lease_owner = NULL WHERE id = ?1", (&p.job_id, &ctx.now))?;
-            exec(ctx.conn, "UPDATE workflow_runs SET state = 'queued', updated_at = ?2 WHERE job_id = ?1", (&p.job_id, &ctx.now))?;
+            exec(
+                ctx.conn,
+                "UPDATE jobs SET state = 'queued', cancel_requested = 0, next_run_at = ?2, error_code = NULL, error_message = NULL, finished_at = NULL, updated_at = ?2, lease_owner = NULL WHERE id = ?1",
+                (&p.job_id, &ctx.now),
+            )?;
+            exec(
+                ctx.conn,
+                "UPDATE workflow_runs SET state = 'queued', updated_at = ?2 WHERE job_id = ?1",
+                (&p.job_id, &ctx.now),
+            )?;
             crate::jobs::job_event(ctx.conn, &p.job_id, "job.requeued", json!({}), &ctx.now)?;
             ctx.jobs_enqueued = true;
             Ok(json!({"job_id": p.job_id, "state": "queued"}))
         }
-        other => Err(OcError::conflict(format!("job is {}; only failed, cancelled or paused jobs can be retried", other.unwrap_or("unknown")))),
+        other => Err(OcError::conflict(format!(
+            "job is {}; only failed, cancelled or paused jobs can be retried",
+            other.unwrap_or("unknown")
+        ))),
     }
 }
 
 fn op_history(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: JobIdParam = parse_params(p)?;
     load(ctx, &p.job_id)?;
-    Ok(json!({"job_id": p.job_id, "events": query_all(ctx.conn, "SELECT sequence, event_type AS event, payload_redacted_json, at FROM job_events WHERE job_id = ?1 ORDER BY sequence", [&p.job_id])?}))
+    Ok(
+        json!({"job_id": p.job_id, "events": query_all(ctx.conn, "SELECT sequence, event_type AS event, payload_redacted_json, at FROM job_events WHERE job_id = ?1 ORDER BY sequence", [&p.job_id])?}),
+    )
 }
 
 fn op_kinds(_ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
@@ -145,11 +182,41 @@ fn op_kinds(_ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
 pub fn ops() -> Vec<OpSpec> {
     vec![
         op!("jobs.list", "jobs.read", Read, "List jobs (agents see their own)", PageParams, op_list),
-        op!("jobs.show", "jobs.read", Read, "Job state, progress, result and next action", JobIdParam, op_show, mcp = "get_job"),
+        op!(
+            "jobs.show",
+            "jobs.read",
+            Read,
+            "Job state, progress, result and next action",
+            JobIdParam,
+            op_show,
+            mcp = "get_job"
+        ),
         op!("jobs.enqueue", "jobs.manage", Write, "Queue a job by kind", EnqueueParams, op_enqueue),
-        op!("jobs.watch", "jobs.read", Read, "Job plus events after a sequence (poll for streaming)", WatchParams, op_watch, mcp = "watch_job"),
-        op!("jobs.cancel", "jobs.manage", Write, "Cancel a queued/paused job or request cancellation of a running one", JobIdParam, op_cancel),
-        op!("jobs.retry", "jobs.manage", Write, "Requeue a failed, cancelled or paused job", JobIdParam, op_retry),
+        op!(
+            "jobs.watch",
+            "jobs.read",
+            Read,
+            "Job plus events after a sequence (poll for streaming)",
+            WatchParams,
+            op_watch,
+            mcp = "watch_job"
+        ),
+        op!(
+            "jobs.cancel",
+            "jobs.manage",
+            Write,
+            "Cancel a queued/paused job or request cancellation of a running one",
+            JobIdParam,
+            op_cancel
+        ),
+        op!(
+            "jobs.retry",
+            "jobs.manage",
+            Write,
+            "Requeue a failed, cancelled or paused job",
+            JobIdParam,
+            op_retry
+        ),
         op!("jobs.history", "jobs.read", Read, "All events for a job", JobIdParam, op_history),
         op!("jobs.kinds", "jobs.read", Read, "Known job kinds", super::Empty, op_kinds),
     ]

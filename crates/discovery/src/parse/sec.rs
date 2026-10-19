@@ -31,7 +31,9 @@ pub fn parse_index(html: &str, base_url: &str) -> Vec<ParsedOpportunity> {
             if title.is_empty() {
                 continue;
             }
-            let path = url::Url::parse(&u).map(|x| format!("{}{}", x.path(), x.fragment().map(|f| format!("#{f}")).unwrap_or_default())).unwrap_or(u.clone());
+            let path = url::Url::parse(&u)
+                .map(|x| format!("{}{}", x.path(), x.fragment().map(|f| format!("#{f}")).unwrap_or_default()))
+                .unwrap_or(u.clone());
             rows.push(ParsedOpportunity {
                 external_key: path.clone(),
                 title: title.clone(),
@@ -47,12 +49,19 @@ pub fn parse_index(html: &str, base_url: &str) -> Vec<ParsedOpportunity> {
                 class_period_end: None,
                 jurisdictions: vec!["US".into()],
                 summary: None,
-                benefit: Benefit { amount_known: false, description: None },
+                benefit: Benefit {
+                    amount_known: false,
+                    description: None,
+                },
                 proof_required: ProofRequirement::Unknown,
                 claim_method: "unknown".into(),
                 source_updated_on: None,
                 terms_confirmed: false,
-                evidence: vec![EvidenceSpan { locator: format!("{INDEX_URL}#a[href='{path}']"), assertion_type: "title".into(), excerpt: title }],
+                evidence: vec![EvidenceSpan {
+                    locator: format!("{INDEX_URL}#a[href='{path}']"),
+                    assertion_type: "title".into(),
+                    excerpt: title,
+                }],
             });
         }
         if rows.len() > best.len() {
@@ -64,7 +73,11 @@ pub fn parse_index(html: &str, base_url: &str) -> Vec<ParsedOpportunity> {
 
 pub fn parse_detail(html: &str, page_url: &str, today: Date) -> Option<ParsedOpportunity> {
     let doc = Html::parse_document(html);
-    let title = doc.select(&sel("h1.page-title__heading, h1")).next().map(element_text).filter(|t| !t.is_empty())?;
+    let title = doc
+        .select(&sel("h1.page-title__heading, h1"))
+        .next()
+        .map(element_text)
+        .filter(|t| !t.is_empty())?;
     let body = doc.select(&sel("div.field--name-body")).next()?;
     let paragraphs: Vec<String> = body.select(&sel("p")).map(element_text).filter(|p| !p.is_empty()).collect();
     if paragraphs.is_empty() {
@@ -73,26 +86,52 @@ pub fn parse_detail(html: &str, page_url: &str, today: Date) -> Option<ParsedOpp
     let text = paragraphs.join(" ");
     let summary = paragraphs.iter().take(2).cloned().collect::<Vec<_>>().join(" ");
     let mut evidence = vec![
-        EvidenceSpan { locator: format!("{page_url}#h1"), assertion_type: "title".into(), excerpt: title.clone() },
-        EvidenceSpan { locator: format!("{page_url}#div.field--name-body p:nth-of-type(1)"), assertion_type: "summary".into(), excerpt: summary.clone() },
+        EvidenceSpan {
+            locator: format!("{page_url}#h1"),
+            assertion_type: "title".into(),
+            excerpt: title.clone(),
+        },
+        EvidenceSpan {
+            locator: format!("{page_url}#div.field--name-body p:nth-of-type(1)"),
+            assertion_type: "summary".into(),
+            excerpt: summary.clone(),
+        },
     ];
     let deadline = find_deadline(&text);
     if let Some((_, s)) = &deadline {
-        evidence.push(EvidenceSpan { locator: format!("{page_url}#div.field--name-body"), assertion_type: "deadline".into(), excerpt: s.clone() });
+        evidence.push(EvidenceSpan {
+            locator: format!("{page_url}#div.field--name-body"),
+            assertion_type: "deadline".into(),
+            excerpt: s.clone(),
+        });
     }
     let (status, claim_method, status_excerpt) = infer_status(&text, deadline.as_ref().map(|d| d.0.as_str()), today);
     if !status_excerpt.is_empty() {
-        evidence.push(EvidenceSpan { locator: format!("{page_url}#div.field--name-body"), assertion_type: "status".into(), excerpt: status_excerpt });
+        evidence.push(EvidenceSpan {
+            locator: format!("{page_url}#div.field--name-body"),
+            assertion_type: "status".into(),
+            excerpt: status_excerpt,
+        });
     }
     let period = find_class_period(&text);
     if let Some((_, _, s)) = &period {
-        evidence.push(EvidenceSpan { locator: format!("{page_url}#div.field--name-body"), assertion_type: "class_period".into(), excerpt: s.clone() });
+        evidence.push(EvidenceSpan {
+            locator: format!("{page_url}#div.field--name-body"),
+            assertion_type: "class_period".into(),
+            excerpt: s.clone(),
+        });
     }
-    static ADMIN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)appointing\s+([A-Z][A-Za-z0-9&.,' -]{2,80}?),?\s+as\s+(?:the\s+)?(?:fund\s+administrator|distribution\s+agent)").unwrap());
+    static ADMIN: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)appointing\s+([A-Z][A-Za-z0-9&.,' -]{2,80}?),?\s+as\s+(?:the\s+)?(?:fund\s+administrator|distribution\s+agent)").unwrap()
+    });
     let mut administrator = None;
     if let Some(c) = ADMIN.captures(&text) {
         administrator = Some(collapse_ws(&c[1]).trim_end_matches(',').to_string());
-        evidence.push(EvidenceSpan { locator: format!("{page_url}#div.field--name-body"), assertion_type: "administrator".into(), excerpt: sentence_around(&text, c.get(0).unwrap().start(), c.get(0).unwrap().end()) });
+        evidence.push(EvidenceSpan {
+            locator: format!("{page_url}#div.field--name-body"),
+            assertion_type: "administrator".into(),
+            excerpt: sentence_around(&text, c.get(0).unwrap().start(), c.get(0).unwrap().end()),
+        });
     }
     let mut claim_url = None;
     for a in body.select(&sel("a[href]")) {
@@ -100,9 +139,15 @@ pub fn parse_detail(html: &str, page_url: &str, today: Date) -> Option<ParsedOpp
         let Some(u) = absolute(page_url, href) else { continue };
         let host = url::Url::parse(&u).ok().and_then(|x| x.host_str().map(|h| h.to_string())).unwrap_or_default();
         let t = element_text(a).to_lowercase();
-        if !host.ends_with("sec.gov") && (t.contains("claim") || t.contains("fund") || host.contains("claim") || host.contains("settlement") || host.contains("fairfund")) {
+        if !host.ends_with("sec.gov")
+            && (t.contains("claim") || t.contains("fund") || host.contains("claim") || host.contains("settlement") || host.contains("fairfund"))
+        {
             claim_url = Some(u);
-            evidence.push(EvidenceSpan { locator: format!("{page_url}#a[href='{href}']"), assertion_type: "claim_url".into(), excerpt: element_text(a) });
+            evidence.push(EvidenceSpan {
+                locator: format!("{page_url}#a[href='{href}']"),
+                assertion_type: "claim_url".into(),
+                excerpt: element_text(a),
+            });
             break;
         }
     }
@@ -153,7 +198,10 @@ mod tests {
         let rows = parse_index(INDEX, INDEX_URL);
         assert!(rows.len() > 300, "got {}", rows.len());
         let a = rows.iter().find(|r| r.title.starts_with("Allianz Global")).unwrap();
-        assert_eq!(a.official_url, "https://www.sec.gov/enforcement-litigation/distributions-harmed-investors/matter-allianz-global-investors-us-llc-admin-proc-file-no-3-20855");
+        assert_eq!(
+            a.official_url,
+            "https://www.sec.gov/enforcement-litigation/distributions-harmed-investors/matter-allianz-global-investors-us-llc-admin-proc-file-no-3-20855"
+        );
         assert_eq!(a.case_number.as_deref(), Some("3-20855"));
         assert!(!a.terms_confirmed);
         assert!(rows.iter().all(|r| r.title != "Mark McKinnies"), "nested individuals must not become cases");
@@ -161,7 +209,12 @@ mod tests {
 
     #[test]
     fn case_page_parses() {
-        let d = parse_detail(ALLIANZ, "https://www.sec.gov/enforcement-litigation/distributions-harmed-investors/matter-allianz-global-investors-us-llc-admin-proc-file-no-3-20855", parse_date("2026-10-19").unwrap()).unwrap();
+        let d = parse_detail(
+            ALLIANZ,
+            "https://www.sec.gov/enforcement-litigation/distributions-harmed-investors/matter-allianz-global-investors-us-llc-admin-proc-file-no-3-20855",
+            parse_date("2026-10-19").unwrap(),
+        )
+        .unwrap();
         assert!(d.title.contains("Allianz"));
         assert_eq!(d.status, OpportunityStatus::AwaitingAdministrator);
         assert_eq!(d.administrator.as_deref(), Some("Epiq Class Action & Claims Solutions, Inc."));

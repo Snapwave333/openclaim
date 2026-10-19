@@ -1,0 +1,13 @@
+{
+  "name": "openclaim-browser-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenClaim Assistant: consented, previewed, undoable prefill. Never submits.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/fill-logic.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^26.0.0"
+  }
+}

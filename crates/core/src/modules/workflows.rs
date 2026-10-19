@@ -47,7 +47,14 @@ pub struct WorkflowDef {
     pub steps: Vec<Step>,
 }
 
-const FORBIDDEN_SCOPES: &[&str] = &["agents.manage", "approvals.decide", "data.wipe", "daemon.manage", "config.write", "sources.manage"];
+const FORBIDDEN_SCOPES: &[&str] = &[
+    "agents.manage",
+    "approvals.decide",
+    "data.wipe",
+    "daemon.manage",
+    "config.write",
+    "sources.manage",
+];
 
 pub fn validate(def: &WorkflowDef) -> OcResult<Vec<String>> {
     if def.schema_version != 1 {
@@ -74,10 +81,16 @@ pub fn validate(def: &WorkflowDef) -> OcResult<Vec<String>> {
     for s in &def.steps {
         let op = ops::find(&s.operation).ok_or_else(|| OcError::invalid(format!("step '{}': unknown operation '{}'", s.id, s.operation)))?;
         if op.effect == Effect::OwnerOnly || FORBIDDEN_SCOPES.contains(&op.scope) || s.operation == "workflows.run" {
-            return Err(OcError::policy(format!("step '{}': operation '{}' is not allowed in workflows", s.id, s.operation)));
+            return Err(OcError::policy(format!(
+                "step '{}': operation '{}' is not allowed in workflows",
+                s.id, s.operation
+            )));
         }
         if !def.permissions.iter().any(|p| p == op.scope) {
-            return Err(OcError::invalid(format!("step '{}' needs permission '{}' which the workflow does not declare", s.id, op.scope)));
+            return Err(OcError::invalid(format!(
+                "step '{}' needs permission '{}' which the workflow does not declare",
+                s.id, op.scope
+            )));
         }
         if !s.with.is_null() && !s.with.is_object() {
             return Err(OcError::invalid(format!("step '{}': with must be an object", s.id)));
@@ -87,10 +100,10 @@ pub fn validate(def: &WorkflowDef) -> OcResult<Vec<String>> {
                 return Err(OcError::invalid(format!("step '{}' waits on unknown step '{a}'", s.id)));
             }
         }
-        if let Some(w) = &s.when {
-            if !ids.contains(w.step.as_str()) {
-                return Err(OcError::invalid(format!("step '{}' condition references unknown step '{}'", s.id, w.step)));
-            }
+        if let Some(w) = &s.when
+            && !ids.contains(w.step.as_str())
+        {
+            return Err(OcError::invalid(format!("step '{}' condition references unknown step '{}'", s.id, w.step)));
         }
     }
     topo_order(def)
@@ -171,8 +184,15 @@ pub fn plan(def: &WorkflowDef) -> OcResult<Value> {
             })
         })
         .collect();
-    let sources: Vec<&str> = def.steps.iter().filter(|s| s.operation.starts_with("sources.refresh")).map(|_| "permitted sources only, rate limits from manifests").collect();
-    Ok(json!({"name": def.name, "order": order, "steps": steps, "permissions": def.permissions, "network": sources, "note": "approval gates pause the run until a human decides; nothing is submitted to official sites"}))
+    let sources: Vec<&str> = def
+        .steps
+        .iter()
+        .filter(|s| s.operation.starts_with("sources.refresh"))
+        .map(|_| "permitted sources only, rate limits from manifests")
+        .collect();
+    Ok(
+        json!({"name": def.name, "order": order, "steps": steps, "permissions": def.permissions, "network": sources, "note": "approval gates pause the run until a human decides; nothing is submitted to official sites"}),
+    )
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -197,7 +217,11 @@ fn resolve_def(ctx: &Ctx<'_>, p: &DefinitionParam) -> OcResult<(WorkflowDef, Opt
         return Ok((def, None));
     }
     if let Some(n) = &p.name {
-        let row = require(query_one(ctx.conn, "SELECT id, definition_json FROM workflows WHERE name = ?1", [n])?, "workflow", n)?;
+        let row = require(
+            query_one(ctx.conn, "SELECT id, definition_json FROM workflows WHERE name = ?1", [n])?,
+            "workflow",
+            n,
+        )?;
         return Ok((serde_json::from_value(row["definition"].clone())?, row["id"].as_str().map(str::to_string)));
     }
     Err(OcError::invalid("provide definition, text or name"))
@@ -223,7 +247,11 @@ fn op_register(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let json = serde_json::to_value(&def)?;
     let digest = openclaim_security::digest::json_digest(&json);
     let id = openclaim_db::new_id();
-    exec(ctx.conn, "INSERT INTO workflows(id, name, definition_json, digest, created_by, created_at) VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT(name) DO UPDATE SET definition_json = excluded.definition_json, digest = excluded.digest, created_by = excluded.created_by, created_at = excluded.created_at", (&id, &def.name, json.to_string(), &digest, ctx.actor_id(), &ctx.now))?;
+    exec(
+        ctx.conn,
+        "INSERT INTO workflows(id, name, definition_json, digest, created_by, created_at) VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT(name) DO UPDATE SET definition_json = excluded.definition_json, digest = excluded.digest, created_by = excluded.created_by, created_at = excluded.created_at",
+        (&id, &def.name, json.to_string(), &digest, ctx.actor_id(), &ctx.now),
+    )?;
     let wid: String = crate::sql::scalar(ctx.conn, "SELECT id FROM workflows WHERE name = ?1", [&def.name])?.unwrap_or(id);
     Ok(json!({"workflow_id": wid, "name": def.name, "digest": digest}))
 }
@@ -244,7 +272,11 @@ pub struct RunParams {
 
 fn op_run(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: RunParams = parse_params(p)?;
-    let row = require(query_one(ctx.conn, "SELECT id, definition_json FROM workflows WHERE name = ?1", [&p.name])?, "workflow", &p.name)?;
+    let row = require(
+        query_one(ctx.conn, "SELECT id, definition_json FROM workflows WHERE name = ?1", [&p.name])?,
+        "workflow",
+        &p.name,
+    )?;
     let def: WorkflowDef = serde_json::from_value(row["definition"].clone())?;
     validate(&def)?;
     for perm in &def.permissions {
@@ -259,7 +291,18 @@ fn op_run(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let run_id = openclaim_db::new_id();
     let job_id = crate::jobs::enqueue(ctx, "workflow_run", json!({"run_id": run_id}), None)?;
     let checkpoint = json!({"actor": actor_snapshot, "results": {}, "pending_approvals": {}, "skipped": []});
-    exec(ctx.conn, "INSERT INTO workflow_runs(id, workflow_id, job_id, state, checkpoint_json, actor_id, created_at, updated_at) VALUES (?1,?2,?3,'queued',?4,?5,?6,?6)", (&run_id, row["id"].as_str().unwrap_or(""), &job_id, checkpoint.to_string(), ctx.actor_id(), &ctx.now))?;
+    exec(
+        ctx.conn,
+        "INSERT INTO workflow_runs(id, workflow_id, job_id, state, checkpoint_json, actor_id, created_at, updated_at) VALUES (?1,?2,?3,'queued',?4,?5,?6,?6)",
+        (
+            &run_id,
+            row["id"].as_str().unwrap_or(""),
+            &job_id,
+            checkpoint.to_string(),
+            ctx.actor_id(),
+            &ctx.now,
+        ),
+    )?;
     Ok(json!({"run_id": run_id, "job_id": job_id, "status": "queued", "detached": true}))
 }
 
@@ -269,7 +312,15 @@ pub struct RunIdParam {
 }
 
 fn load_run(ctx: &Ctx<'_>, run_id: &str) -> OcResult<Value> {
-    let row = require(query_one(ctx.conn, "SELECT r.*, w.name, j.state AS job_state, j.progress, j.error_message FROM workflow_runs r JOIN workflows w ON w.id = r.workflow_id JOIN jobs j ON j.id = r.job_id WHERE r.id = ?1", [run_id])?, "workflow run", run_id)?;
+    let row = require(
+        query_one(
+            ctx.conn,
+            "SELECT r.*, w.name, j.state AS job_state, j.progress, j.error_message FROM workflow_runs r JOIN workflows w ON w.id = r.workflow_id JOIN jobs j ON j.id = r.job_id WHERE r.id = ?1",
+            [run_id],
+        )?,
+        "workflow run",
+        run_id,
+    )?;
     if !ctx.actor.is_owner() && row["actor_id"] != ctx.actor_id() {
         return Err(OcError::not_found(format!("workflow run '{run_id}' not found")));
     }
@@ -279,12 +330,11 @@ fn load_run(ctx: &Ctx<'_>, run_id: &str) -> OcResult<Value> {
 fn op_status(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: RunIdParam = parse_params(p)?;
     let mut row = load_run(ctx, &p.run_id)?;
-    if let Some(o) = row.as_object_mut() {
-        if let Some(cp) = o.get_mut("checkpoint") {
-            if let Some(c) = cp.as_object_mut() {
-                c.remove("actor");
-            }
-        }
+    if let Some(o) = row.as_object_mut()
+        && let Some(cp) = o.get_mut("checkpoint")
+        && let Some(c) = cp.as_object_mut()
+    {
+        c.remove("actor");
     }
     Ok(row)
 }
@@ -295,8 +345,16 @@ fn op_resume(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let job_id = row["job_id"].as_str().unwrap_or("").to_string();
     match row["job_state"].as_str() {
         Some("paused_for_approval") | Some("failed") | Some("cancelled") => {
-            exec(ctx.conn, "UPDATE jobs SET state = 'queued', cancel_requested = 0, next_run_at = ?2, error_code = NULL, error_message = NULL, finished_at = NULL, updated_at = ?2, lease_owner = NULL WHERE id = ?1", (&job_id, &ctx.now))?;
-            exec(ctx.conn, "UPDATE workflow_runs SET state = 'queued', updated_at = ?2 WHERE id = ?1", (&p.run_id, &ctx.now))?;
+            exec(
+                ctx.conn,
+                "UPDATE jobs SET state = 'queued', cancel_requested = 0, next_run_at = ?2, error_code = NULL, error_message = NULL, finished_at = NULL, updated_at = ?2, lease_owner = NULL WHERE id = ?1",
+                (&job_id, &ctx.now),
+            )?;
+            exec(
+                ctx.conn,
+                "UPDATE workflow_runs SET state = 'queued', updated_at = ?2 WHERE id = ?1",
+                (&p.run_id, &ctx.now),
+            )?;
             crate::jobs::job_event(ctx.conn, &job_id, "job.requeued", json!({"resume": true}), &ctx.now)?;
             ctx.jobs_enqueued = true;
             Ok(json!({"run_id": p.run_id, "job_id": job_id, "status": "queued"}))
@@ -309,7 +367,11 @@ fn op_cancel(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     let p: RunIdParam = parse_params(p)?;
     let row = load_run(ctx, &p.run_id)?;
     let job_id = row["job_id"].as_str().unwrap_or("").to_string();
-    crate::modules::jobs_ops::ops().iter().find(|o| o.name == "jobs.cancel").map(|o| (o.handler)(ctx, json!({"job_id": job_id}))).transpose()?;
+    crate::modules::jobs_ops::ops()
+        .iter()
+        .find(|o| o.name == "jobs.cancel")
+        .map(|o| (o.handler)(ctx, json!({"job_id": job_id})))
+        .transpose()?;
     Ok(json!({"run_id": p.run_id, "status": "cancel_requested"}))
 }
 
@@ -319,7 +381,11 @@ fn op_export(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         name: String,
     }
     let p: P = parse_params(p)?;
-    let row = require(query_one(ctx.conn, "SELECT definition_json FROM workflows WHERE name = ?1", [&p.name])?, "workflow", &p.name)?;
+    let row = require(
+        query_one(ctx.conn, "SELECT definition_json FROM workflows WHERE name = ?1", [&p.name])?,
+        "workflow",
+        &p.name,
+    )?;
     let yaml = serde_yaml::to_string(&row["definition"]).map_err(|e| OcError::internal(e.to_string()))?;
     Ok(json!({"name": p.name, "definition": row["definition"], "yaml": yaml}))
 }
@@ -328,9 +394,21 @@ fn op_export(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
 pub async fn execute_run(svc: &Service, job_id: &str, run_id: &str) -> OcResult<Value> {
     let (def, mut checkpoint) = {
         let guard = svc.inner.db.lock().map_err(|_| OcError::internal("db lock"))?;
-        let row = require(query_one(&guard.conn, "SELECT r.checkpoint_json, w.definition_json FROM workflow_runs r JOIN workflows w ON w.id = r.workflow_id WHERE r.id = ?1", [run_id])?, "workflow run", run_id)?;
+        let row = require(
+            query_one(
+                &guard.conn,
+                "SELECT r.checkpoint_json, w.definition_json FROM workflow_runs r JOIN workflows w ON w.id = r.workflow_id WHERE r.id = ?1",
+                [run_id],
+            )?,
+            "workflow run",
+            run_id,
+        )?;
         let def: WorkflowDef = serde_json::from_value(row["definition"].clone())?;
-        exec(&guard.conn, "UPDATE workflow_runs SET state = 'running', updated_at = ?2 WHERE id = ?1", (run_id, openclaim_domain::dates::now_rfc3339()))?;
+        exec(
+            &guard.conn,
+            "UPDATE workflow_runs SET state = 'running', updated_at = ?2 WHERE id = ?1",
+            (run_id, openclaim_domain::dates::now_rfc3339()),
+        )?;
         (def, row["checkpoint"].clone())
     };
     let order = validate(&def)?;
@@ -384,21 +462,68 @@ pub async fn execute_run(svc: &Service, job_id: &str, run_id: &str) -> OcResult<
     Ok(json!({"run_id": run_id, "completed": results.keys().collect::<Vec<_>>(), "skipped": skipped, "results": results}))
 }
 
-fn save_checkpoint(svc: &Service, run_id: &str, actor: &Actor, results: &BTreeMap<String, Value>, pending: &BTreeMap<String, String>, skipped: &[String], state: &str) -> OcResult<()> {
+fn save_checkpoint(
+    svc: &Service,
+    run_id: &str,
+    actor: &Actor,
+    results: &BTreeMap<String, Value>,
+    pending: &BTreeMap<String, String>,
+    skipped: &[String],
+    state: &str,
+) -> OcResult<()> {
     let guard = svc.inner.db.lock().map_err(|_| OcError::internal("db lock"))?;
     let cp = json!({"actor": actor, "results": results, "pending_approvals": pending, "skipped": skipped});
-    exec(&guard.conn, "UPDATE workflow_runs SET checkpoint_json = ?2, state = ?3, updated_at = ?4 WHERE id = ?1", (run_id, cp.to_string(), state, openclaim_domain::dates::now_rfc3339()))?;
+    exec(
+        &guard.conn,
+        "UPDATE workflow_runs SET checkpoint_json = ?2, state = ?3, updated_at = ?4 WHERE id = ?1",
+        (run_id, cp.to_string(), state, openclaim_domain::dates::now_rfc3339()),
+    )?;
     Ok(())
 }
 
 pub fn ops() -> Vec<OpSpec> {
     vec![
         op!("workflows.list", "workflows.run", Read, "Registered workflows", super::Empty, op_list),
-        op!("workflows.validate", "workflows.run", Read, "Validate a workflow definition (JSON/YAML)", DefinitionParam, op_validate),
-        op!("workflows.register", "workflows.run", Write, "Register or replace a workflow by name", DefinitionParam, op_register),
-        op!("workflows.plan", "workflows.run", Read, "Preview order, scopes, network use and approval gates", DefinitionParam, op_plan),
-        op!("workflows.run", "workflows.run", Write, "Start a durable run (returns job id)", RunParams, op_run),
-        op!("workflows.resume", "workflows.run", Write, "Resume a paused or failed run from its checkpoint", RunIdParam, op_resume),
+        op!(
+            "workflows.validate",
+            "workflows.run",
+            Read,
+            "Validate a workflow definition (JSON/YAML)",
+            DefinitionParam,
+            op_validate
+        ),
+        op!(
+            "workflows.register",
+            "workflows.run",
+            Write,
+            "Register or replace a workflow by name",
+            DefinitionParam,
+            op_register
+        ),
+        op!(
+            "workflows.plan",
+            "workflows.run",
+            Read,
+            "Preview order, scopes, network use and approval gates",
+            DefinitionParam,
+            op_plan
+        ),
+        op!(
+            "workflows.run",
+            "workflows.run",
+            Write,
+            "Start a durable run (returns job id)",
+            RunParams,
+            op_run
+        ),
+        op!(
+            "workflows.resume",
+            "workflows.run",
+            Write,
+            "Resume a paused or failed run from its checkpoint",
+            RunIdParam,
+            op_resume
+        ),
         op!("workflows.status", "workflows.run", Read, "Run state and checkpoint", RunIdParam, op_status),
         op!("workflows.cancel", "workflows.run", Write, "Cancel a run", RunIdParam, op_cancel),
         op!("workflows.export", "workflows.run", Read, "Export a workflow as YAML", super::Empty, op_export),

@@ -156,8 +156,28 @@ string_enum! {
 /// with common legal noise words removed. Never used on its own to merge.
 pub fn normalize_title(title: &str) -> String {
     const NOISE: &[&str] = &[
-        "the", "inc", "llc", "ltd", "corp", "corporation", "co", "company", "et", "al", "refunds",
-        "refund", "settlement", "program", "v", "vs", "in", "re", "matter", "of", "sec", "ftc",
+        "the",
+        "inc",
+        "llc",
+        "ltd",
+        "corp",
+        "corporation",
+        "co",
+        "company",
+        "et",
+        "al",
+        "refunds",
+        "refund",
+        "settlement",
+        "program",
+        "v",
+        "vs",
+        "in",
+        "re",
+        "matter",
+        "of",
+        "sec",
+        "ftc",
     ];
     title
         .to_lowercase()
@@ -169,12 +189,7 @@ pub fn normalize_title(title: &str) -> String {
 
 /// Dedupe key: normalized title + docket + administrator + key date.
 /// Two records only merge when every present component agrees.
-pub fn dedupe_key(
-    title: &str,
-    case_number: Option<&str>,
-    administrator: Option<&str>,
-    class_period_start: Option<&str>,
-) -> String {
+pub fn dedupe_key(title: &str, case_number: Option<&str>, administrator: Option<&str>, class_period_start: Option<&str>) -> String {
     let norm = |s: Option<&str>| {
         s.map(|v| v.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect::<String>())
             .unwrap_or_default()
