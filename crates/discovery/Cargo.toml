@@ -1,0 +1,23 @@
+[package]
+name = "openclaim-discovery"
+description = "Free-source connectors for OpenClaim: policy-gated fetching, robots compliance, parsers and dedupe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+openclaim-domain.workspace = true
+openclaim-security.workspace = true
+feed-rs = "2"
+futures.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+schemars.workspace = true
+scraper.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+texting_robots.workspace = true
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true

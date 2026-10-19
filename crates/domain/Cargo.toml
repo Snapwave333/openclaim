@@ -1,0 +1,13 @@
+[package]
+name = "openclaim-domain"
+description = "OpenClaim domain types, deterministic eligibility rules, claim state machine and machine contracts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+thiserror.workspace = true
+time.workspace = true

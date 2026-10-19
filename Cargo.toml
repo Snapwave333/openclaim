@@ -1,0 +1,76 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/domain",
+    "crates/security",
+    "crates/db",
+    "crates/extract",
+    "crates/discovery",
+    "crates/core",
+    "crates/ipc",
+    "crates/api",
+    "crates/cli-core",
+    "crates/mcp-adapter",
+    "apps/cli",
+    "apps/daemon",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/openclaim/openclaim"
+rust-version = "1.88"
+
+[workspace.dependencies]
+openclaim-domain = { path = "crates/domain" }
+openclaim-security = { path = "crates/security" }
+openclaim-db = { path = "crates/db" }
+openclaim-extract = { path = "crates/extract" }
+openclaim-discovery = { path = "crates/discovery" }
+openclaim-core = { path = "crates/core" }
+openclaim-ipc = { path = "crates/ipc" }
+openclaim-api = { path = "crates/api" }
+openclaim-cli-core = { path = "crates/cli-core" }
+openclaim-mcp-adapter = { path = "crates/mcp-adapter" }
+
+anyhow = "1"
+argon2 = "0.5"
+async-stream = "0.3"
+axum = { version = "0.8", features = ["macros"] }
+base64 = "0.22"
+chacha20poly1305 = "0.10"
+clap = { version = "4", features = ["derive", "env", "wrap_help"] }
+clap_complete = "4"
+futures = "0.3"
+hex = "0.4"
+ipnet = "2"
+mail-parser = "0.11"
+pdf-extract = "0.10"
+rand = "0.8"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "stream"] }
+rpassword = "7"
+rusqlite = { version = "0.37", features = ["bundled", "backup"] }
+schemars = "1"
+scraper = "0.24"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_yaml = "0.9"
+sha2 = "0.10"
+tempfile = "3"
+texting_robots = "0.2"
+thiserror = "2"
+time = { version = "0.3", features = ["formatting", "parsing", "macros", "serde"] }
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_System_Memory", "Win32_System_Threading", "Win32_Storage_FileSystem"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true

@@ -1,0 +1,19 @@
+{
+  "id": "sec-distributions",
+  "name": "SEC Distributions to Harmed Investors",
+  "connector": "sec_distributions",
+  "url": "https://www.sec.gov/enforcement-litigation/distributions-harmed-investors",
+  "authority_tier": "A",
+  "price": "free",
+  "auth_requirement": "declared_contact_user_agent",
+  "robots_policy": "respect",
+  "terms_url": "https://www.sec.gov/privacy#security",
+  "terms_review_date": "2026-10-19",
+  "rate_limit": { "min_interval_ms": 1000, "max_requests_per_run": 30 },
+  "automation_allowed": true,
+  "allowed_hosts": ["sec.gov"],
+  "freshness_ttl_hours": 24,
+  "follow_detail_pages": true,
+  "max_detail_pages": 25,
+  "notes": "SEC fair-access rules require a User-Agent that declares a contact. Set `network.contact` (e.g. a name and email) before this connector is enabled; it is otherwise reported as needs_configuration."
+}

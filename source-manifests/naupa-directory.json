@@ -1,0 +1,17 @@
+{
+  "id": "naupa-directory",
+  "name": "NAUPA official unclaimed-property program directory",
+  "connector": "naupa_directory",
+  "url": "https://unclaimed.org/search/",
+  "authority_tier": "A",
+  "price": "free",
+  "auth_requirement": "none",
+  "robots_policy": "respect",
+  "terms_url": "https://unclaimed.org/privacy-policy/",
+  "terms_review_date": "2026-10-19",
+  "rate_limit": { "min_interval_ms": 5000, "max_requests_per_run": 2 },
+  "automation_allowed": true,
+  "allowed_hosts": ["unclaimed.org"],
+  "freshness_ttl_hours": 168,
+  "notes": "Directory of official state and provincial programs. Individual name searches happen on each official site; OpenClaim never bulk-searches names."
+}

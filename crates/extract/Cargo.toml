@@ -1,0 +1,17 @@
+[package]
+name = "openclaim-extract"
+description = "On-device document parsing for the OpenClaim evidence vault (PDF text, email, MBOX, CSV, optional Tesseract OCR)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+openclaim-domain.workspace = true
+openclaim-security.workspace = true
+mail-parser.workspace = true
+pdf-extract.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+tempfile.workspace = true
