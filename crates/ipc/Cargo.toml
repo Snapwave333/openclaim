@@ -1,5 +1,17 @@
 [package]
 name = "openclaim-ipc"
+description = "Authenticated local IPC (Windows named pipe with owner-only ACL / Unix socket) between openclaim and openclaimd"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+
+[dependencies]
+openclaim-core.workspace = true
+openclaim-domain.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true

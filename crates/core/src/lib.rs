@@ -25,6 +25,10 @@ pub use ctx::{Actor, Credentials, Request};
 pub use dispatch::Response;
 pub use paths::Paths;
 
+pub fn new_request_id() -> String {
+    openclaim_db::new_id()
+}
+
 #[derive(Debug, Clone)]
 pub struct OwnerSession {
     pub id: String,

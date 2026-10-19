@@ -1,5 +1,22 @@
 [package]
-name = "openclaim-cli-app"
+name = "openclaim"
+description = "OpenClaim command-line interface"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+
+[[bin]]
+name = "openclaim"
+path = "src/main.rs"
+
+[dependencies]
+openclaim-cli-core.workspace = true
+openclaim-core.workspace = true
+openclaim-domain.workspace = true
+openclaim-mcp-adapter.workspace = true
+openclaim-ipc.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+rpassword.workspace = true
+serde_json.workspace = true
+tokio.workspace = true

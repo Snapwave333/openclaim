@@ -1,0 +1,324 @@
+//! The command tree (MDR §17), expressed as data so help, completions,
+//! `help --output json` and the MCP/REST parity check all derive from one table.
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    /// Plain string.
+    Str,
+    /// Integer.
+    Int,
+    /// Boolean flag (present = true).
+    Flag,
+    /// `true`/`false` value.
+    BoolVal,
+    /// JSON value inline, or `@path` to read a JSON/YAML file.
+    Json,
+    /// Path whose *contents* become the parameter (snapshot HTML, workflow text).
+    FileText,
+    /// Comma-separated list → array of strings.
+    List,
+    /// Variadic positional → array of strings.
+    Multi,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ArgSpec {
+    pub name: &'static str,
+    pub param: &'static str,
+    pub kind: Kind,
+    pub positional: bool,
+    pub required: bool,
+    pub help: &'static str,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CmdSpec {
+    pub group: &'static str,
+    pub name: &'static str,
+    /// Operation name, or `local:<handler>` for commands the CLI implements itself.
+    pub op: &'static str,
+    pub about: &'static str,
+    pub args: &'static [ArgSpec],
+}
+
+const fn pos(name: &'static str, param: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec { name, param, kind: Kind::Str, positional: true, required: true, help }
+}
+const fn pos_opt(name: &'static str, param: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec { name, param, kind: Kind::Str, positional: true, required: false, help }
+}
+const fn multi(name: &'static str, param: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec { name, param, kind: Kind::Multi, positional: true, required: true, help }
+}
+const fn req(name: &'static str, param: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec { name, param, kind: Kind::Str, positional: false, required: true, help }
+}
+const fn opt(name: &'static str, param: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec { name, param, kind: Kind::Str, positional: false, required: false, help }
+}
+const fn int(name: &'static str, param: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec { name, param, kind: Kind::Int, positional: false, required: false, help }
+}
+const fn flag(name: &'static str, param: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec { name, param, kind: Kind::Flag, positional: false, required: false, help }
+}
+const fn boolv(name: &'static str, param: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec { name, param, kind: Kind::BoolVal, positional: false, required: true, help }
+}
+const fn json(name: &'static str, param: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec { name, param, kind: Kind::Json, positional: false, required: false, help }
+}
+const fn json_req(name: &'static str, param: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec { name, param, kind: Kind::Json, positional: false, required: true, help }
+}
+const fn file(name: &'static str, param: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec { name, param, kind: Kind::FileText, positional: false, required: false, help }
+}
+const fn list(name: &'static str, param: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec { name, param, kind: Kind::List, positional: false, required: false, help }
+}
+
+const SEARCH_ARGS: &[ArgSpec] = &[
+    pos_opt("query", "q", "Full-text query"),
+    opt("filter", "filter", "Filter string, e.g. 'status=open only_verified deadline_before=2027-01-01'"),
+    list("status", "status", "open,upcoming,automatic_distribution,past_deadline,closed,awaiting_administrator,unknown"),
+    opt("state", "state", "Jurisdiction code (CA, US)"),
+    flag("only-verified", "only_verified", "Only records confirmed by a primary source"),
+    opt("deadline-after", "deadline_after", "YYYY-MM-DD"),
+    opt("deadline-before", "deadline_before", "YYYY-MM-DD"),
+    opt("verified-since", "verified_since", "RFC 3339 or YYYY-MM-DD"),
+    opt("claim-method", "claim_method", "online_form | automatic | mail | unknown"),
+    opt("proof-required", "proof_required", "none | optional | required | unknown"),
+    opt("administrator", "administrator", "Administrator name contains"),
+    opt("source", "source_id", "Source id"),
+    opt("source-health", "source_health", "healthy | degraded | blocked | …"),
+    opt("match-state", "match_state", "With --person: potential_match | needs_more_information | …"),
+    opt("person", "person_id", "Person id (adds match state)"),
+    flag("bookmarked", "bookmarked", "Only bookmarked"),
+    flag("include-hidden", "include_hidden", "Include hidden records"),
+    opt("sort", "sort", "deadline | updated | verified | title | activity"),
+];
+
+pub const COMMANDS: &[CmdSpec] = &[
+    // --- top level
+    CmdSpec { group: "", name: "init", op: "local:init", about: "Set the owner passphrase (first run)", args: &[flag("passphrase-stdin", "passphrase_stdin", "Read the passphrase from stdin (automation)")] },
+    CmdSpec { group: "", name: "unlock", op: "local:unlock", about: "Prove the passphrase and print a session export line", args: &[int("ttl", "ttl_minutes", "Session minutes"), flag("passphrase-stdin", "passphrase_stdin", "Read the passphrase from stdin")] },
+    CmdSpec { group: "", name: "lock", op: "owner.lock", about: "End the current owner session", args: &[] },
+    CmdSpec { group: "", name: "whoami", op: "owner.status", about: "Show how the daemon identifies you", args: &[] },
+    CmdSpec { group: "", name: "help-json", op: "local:help_json", about: "Command tree as JSON (same as `help --output json`)", args: &[] },
+    // --- daemon
+    CmdSpec { group: "daemon", name: "ensure", op: "local:daemon_ensure", about: "Start the daemon if it is not running", args: &[] },
+    CmdSpec { group: "daemon", name: "start", op: "local:daemon_start", about: "Start the daemon in the background", args: &[flag("foreground", "foreground", "Run in this terminal instead")] },
+    CmdSpec { group: "daemon", name: "stop", op: "local:daemon_stop", about: "Stop the daemon (durable jobs resume later)", args: &[] },
+    CmdSpec { group: "daemon", name: "restart", op: "local:daemon_restart", about: "Stop then start the daemon", args: &[] },
+    CmdSpec { group: "daemon", name: "status", op: "local:daemon_status", about: "Daemon reachability, pid, ports and counts", args: &[] },
+    CmdSpec { group: "daemon", name: "health", op: "daemon.health", about: "Source health and job states", args: &[] },
+    CmdSpec { group: "daemon", name: "logs", op: "daemon.logs", about: "Recent command runs and log location", args: &[int("limit", "limit", "Rows")] },
+    CmdSpec { group: "daemon", name: "doctor", op: "daemon.doctor", about: "Environment checks", args: &[] },
+    // --- discover
+    CmdSpec { group: "discover", name: "search", op: "discover.search", about: "Search the catalog", args: SEARCH_ARGS },
+    CmdSpec { group: "discover", name: "new", op: "discover.new", about: "Recently discovered opportunities", args: &[int("since-days", "since_days", "Window in days (14)"), flag("only-verified", "only_verified", "Verified only")] },
+    CmdSpec { group: "discover", name: "trending", op: "discover.trending", about: "Verified opportunities by recent official activity", args: &[opt("state", "state", "Jurisdiction")] },
+    CmdSpec { group: "discover", name: "compare", op: "discover.compare", about: "Compare opportunities side by side", args: &[multi("ids", "ids", "Two to six opportunity ids")] },
+    CmdSpec { group: "discover", name: "watch", op: "local:watch_events", about: "Stream catalog events (NDJSON)", args: &[int("seconds", "seconds", "Stop after N seconds (0 = forever)")] },
+    CmdSpec { group: "discover", name: "history", op: "discover.history", about: "Recent official changes", args: &[int("days", "days", "Window in days (30)")] },
+    // --- opportunities
+    CmdSpec { group: "opportunities", name: "list", op: "opportunities.list", about: "List/search opportunities", args: SEARCH_ARGS },
+    CmdSpec { group: "opportunities", name: "show", op: "opportunities.show", about: "Show one opportunity", args: &[pos("id", "id", "Opportunity id"), list("include", "include", "sources,rules,provenance,changes,aliases,matches,all")] },
+    CmdSpec { group: "opportunities", name: "rules", op: "opportunities.rules", about: "Structured eligibility rules", args: &[pos("id", "id", "Opportunity id")] },
+    CmdSpec { group: "opportunities", name: "set-rules", op: "opportunities.set_rules", about: "Curate rules from quoted official text", args: &[pos("id", "opportunity_id", "Opportunity id"), json_req("rules", "rules", "RuleSet JSON or @file"), req("excerpt", "original_text_excerpt", "Verbatim official eligibility text"), opt("evidence", "evidence_id", "Evidence link id")] },
+    CmdSpec { group: "opportunities", name: "sources", op: "opportunities.sources", about: "Evidence and snapshots behind a record", args: &[pos("id", "id", "Opportunity id")] },
+    CmdSpec { group: "opportunities", name: "changes", op: "opportunities.changes", about: "Change history", args: &[pos("id", "id", "Opportunity id")] },
+    CmdSpec { group: "opportunities", name: "verify", op: "opportunities.verify", about: "Owner review of verification state", args: &[pos("id", "id", "Opportunity id"), req("state", "state", "verified | disputed | verification_pending"), req("note", "note", "Why")] },
+    CmdSpec { group: "opportunities", name: "bookmark", op: "opportunities.bookmark", about: "Bookmark (or --off)", args: &[pos("id", "id", "Opportunity id"), ArgSpec { name: "off", param: "on", kind: Kind::Flag, positional: false, required: false, help: "Remove the bookmark" }] },
+    CmdSpec { group: "opportunities", name: "hide", op: "opportunities.hide", about: "Hide (or --off)", args: &[pos("id", "id", "Opportunity id"), ArgSpec { name: "off", param: "on", kind: Kind::Flag, positional: false, required: false, help: "Unhide" }] },
+    CmdSpec { group: "opportunities", name: "report", op: "opportunities.report", about: "Report an inaccurate record", args: &[pos("id", "id", "Opportunity id"), req("reason", "reason", "What is wrong")] },
+    CmdSpec { group: "opportunities", name: "export", op: "opportunities.export", about: "Export results (json, csv, markdown)", args: &[opt("format", "format", "json | csv | markdown"), opt("filter", "filter", "Filter string"), flag("only-verified", "only_verified", "Verified only")] },
+    CmdSpec { group: "tips", name: "submit", op: "tips.submit", about: "Submit a settlement tip URL (quarantined)", args: &[pos("url", "url", "Link"), opt("title", "title", "Title"), opt("note", "note", "Note")] },
+    CmdSpec { group: "tips", name: "list", op: "tips.list", about: "List tips", args: &[] },
+    // --- sources
+    CmdSpec { group: "sources", name: "list", op: "sources.list", about: "Registered sources", args: &[] },
+    CmdSpec { group: "sources", name: "show", op: "sources.show", about: "Source details", args: &[pos("id", "source_id", "Source id")] },
+    CmdSpec { group: "sources", name: "health", op: "sources.health", about: "Freshness and failures", args: &[] },
+    CmdSpec { group: "sources", name: "refresh", op: "sources.refresh", about: "Queue compliant refresh jobs", args: &[opt("source", "source_id", "One source id"), opt("scope", "scope", "official | all"), flag("force", "force", "Ignore freshness TTL")] },
+    CmdSpec { group: "sources", name: "test", op: "sources.test", about: "One-request connectivity test", args: &[pos("id", "source_id", "Source id")] },
+    CmdSpec { group: "sources", name: "validate", op: "sources.validate", about: "Validate a connector manifest", args: &[json_req("manifest", "manifest", "Manifest JSON or @file")] },
+    CmdSpec { group: "sources", name: "register", op: "sources.register", about: "Register a connector manifest", args: &[json_req("manifest", "manifest", "Manifest JSON or @file")] },
+    CmdSpec { group: "sources", name: "disable", op: "sources.disable", about: "Disable a source", args: &[pos("id", "source_id", "Source id"), opt("reason", "reason", "Why")] },
+    CmdSpec { group: "sources", name: "enable", op: "sources.enable", about: "Enable a source", args: &[pos("id", "source_id", "Source id")] },
+    CmdSpec { group: "sources", name: "history", op: "sources.history", about: "Snapshot history", args: &[pos("id", "source_id", "Source id")] },
+    CmdSpec { group: "sources", name: "import-snapshot", op: "sources.import_snapshot", about: "Import a page you saved from the official site", args: &[req("source", "source_id", "Source id"), req("url", "url", "Official page URL"), file("file", "html", "Saved HTML file")] },
+    // --- match
+    CmdSpec { group: "match", name: "evaluate", op: "match.evaluate", about: "Deterministic eligibility evaluation", args: &[req("person", "person_id", "Person id"), opt("opportunity", "opportunity_id", "Opportunity id (omit = all verified)")] },
+    CmdSpec { group: "match", name: "explain", op: "match.explain", about: "Why a person matched or not", args: &[req("person", "person_id", "Person id"), req("opportunity", "opportunity_id", "Opportunity id")] },
+    CmdSpec { group: "match", name: "list", op: "match.list", about: "Stored match states", args: &[req("person", "person_id", "Person id"), opt("state", "state", "Filter by state")] },
+    CmdSpec { group: "match", name: "missing", op: "match.missing", about: "Questions that unblock matches", args: &[req("person", "person_id", "Person id")] },
+    CmdSpec { group: "match", name: "refresh", op: "match.refresh", about: "Queue re-evaluation", args: &[opt("person", "person_id", "Person id")] },
+    CmdSpec { group: "match", name: "compare", op: "match.compare", about: "Compare opportunities for one person", args: &[req("person", "person_id", "Person id"), list("opportunities", "opportunity_ids", "Comma-separated ids")] },
+    CmdSpec { group: "match", name: "export", op: "match.export", about: "Export match states as CSV", args: &[req("person", "person_id", "Person id")] },
+    // --- people
+    CmdSpec { group: "people", name: "list", op: "people.list", about: "Profiles", args: &[] },
+    CmdSpec { group: "people", name: "show", op: "people.show", about: "Profile details", args: &[pos("id", "id", "Person id")] },
+    CmdSpec { group: "people", name: "create", op: "people.create", about: "Create a profile", args: &[req("name", "display_name", "Display name"), json("details", "details", "Details JSON or @file"), json("consent", "consent", "Consent JSON")] },
+    CmdSpec { group: "people", name: "update", op: "people.update", about: "Update a profile", args: &[pos("id", "id", "Person id"), opt("name", "display_name", "New name"), json("details", "details", "Details JSON or @file"), int("expected-version", "expected_version", "Optimistic concurrency")] },
+    CmdSpec { group: "people", name: "residences", op: "people.residences", about: "Residence timeline", args: &[pos("id", "person_id", "Person id")] },
+    CmdSpec { group: "people", name: "add-residence", op: "people.add_residence", about: "Add a residence period", args: &[pos("id", "person_id", "Person id"), req("jurisdiction", "jurisdiction", "CA, NY, US…"), opt("start", "start", "YYYY-MM-DD"), opt("end", "end", "YYYY-MM-DD")] },
+    CmdSpec { group: "people", name: "remove-residence", op: "people.remove_residence", about: "Remove a residence period", args: &[pos("id", "id", "Residence id")] },
+    CmdSpec { group: "people", name: "consent", op: "people.consent", about: "Record explicit authorization", args: &[pos("id", "person_id", "Person id"), boolv("authorized", "authorized_by_adult", "true | false"), opt("note", "note", "Note")] },
+    CmdSpec { group: "people", name: "history", op: "people.history", about: "Claims, matches and audit", args: &[pos("id", "id", "Person id")] },
+    CmdSpec { group: "people", name: "delete", op: "people.delete", about: "Permanently delete a person", args: &[pos("id", "id", "Person id"), flag("confirm", "confirm", "Really delete")] },
+    // --- facts
+    CmdSpec { group: "facts", name: "list", op: "facts.list", about: "Confirmed facts", args: &[req("person", "person_id", "Person id")] },
+    CmdSpec { group: "facts", name: "add", op: "facts.add", about: "Assert a fact (humans only)", args: &[req("person", "person_id", "Person id"), req("type", "fact_type", "purchase | subscription | account | service | vehicle | employment | other"), opt("merchant", "merchant", "Merchant"), opt("product", "product", "Product"), opt("start", "start", "YYYY-MM-DD"), opt("end", "end", "YYYY-MM-DD"), ArgSpec { name: "negative", param: "positive", kind: Kind::Flag, positional: false, required: false, help: "Record that this did NOT happen" }, opt("proof", "proof_id", "Document id")] },
+    CmdSpec { group: "facts", name: "propose", op: "facts.propose", about: "Propose a fact for human review", args: &[req("person", "person_id", "Person id"), opt("from-document", "document_id", "Document id"), json_req("input-json", "proposal", "Fact JSON or @file"), opt("locator", "evidence_locator", "Where in the document")] },
+    CmdSpec { group: "facts", name: "validate", op: "facts.validate", about: "Check a proposal against its document", args: &[pos("id", "id", "Proposal id")] },
+    CmdSpec { group: "facts", name: "confirm", op: "facts.confirm", about: "Confirm a proposal", args: &[pos("id", "id", "Proposal id")] },
+    CmdSpec { group: "facts", name: "reject", op: "facts.reject", about: "Reject a proposal", args: &[pos("id", "id", "Proposal id")] },
+    CmdSpec { group: "facts", name: "link-proof", op: "facts.link_proof", about: "Link a document as proof", args: &[req("fact", "fact_id", "Fact id"), req("document", "document_id", "Document id")] },
+    CmdSpec { group: "facts", name: "remove", op: "facts.remove", about: "Remove a fact", args: &[pos("id", "id", "Fact id")] },
+    CmdSpec { group: "facts", name: "attest", op: "facts.attest", about: "Answer a yes/no eligibility question", args: &[req("person", "person_id", "Person id"), req("opportunity", "opportunity_id", "Opportunity id"), req("key", "key", "Attestation key"), boolv("value", "value", "true | false")] },
+    CmdSpec { group: "facts", name: "exclude", op: "facts.exclude", about: "Mark 'not part of this class'", args: &[req("person", "person_id", "Person id"), req("opportunity", "opportunity_id", "Opportunity id"), ArgSpec { name: "clear", param: "not_in_class", kind: Kind::Flag, positional: false, required: false, help: "Clear the exclusion" }] },
+    CmdSpec { group: "facts", name: "history", op: "facts.history", about: "Proposals and attestations", args: &[req("person", "person_id", "Person id"), opt("state", "state", "proposed | confirmed | rejected")] },
+    // --- documents
+    CmdSpec { group: "documents", name: "import", op: "documents.import", about: "Import a file into the encrypted vault", args: &[req("file", "file", "Absolute path"), opt("person", "person_id", "Person id")] },
+    CmdSpec { group: "documents", name: "list", op: "documents.list", about: "Vault documents", args: &[opt("person", "person_id", "Person id")] },
+    CmdSpec { group: "documents", name: "show", op: "documents.show", about: "Document metadata", args: &[pos("id", "id", "Document id")] },
+    CmdSpec { group: "documents", name: "extract", op: "documents.extract", about: "Re-run extraction", args: &[pos("id", "id", "Document id")] },
+    CmdSpec { group: "documents", name: "suggestions", op: "documents.suggestions", about: "Deterministic fact suggestions", args: &[pos("id", "id", "Document id")] },
+    CmdSpec { group: "documents", name: "search", op: "documents.search", about: "Local full-text search", args: &[pos("query", "q", "Words")] },
+    CmdSpec { group: "documents", name: "excerpt", op: "documents.excerpt", about: "Bounded redacted excerpt", args: &[pos("id", "id", "Document id"), int("offset", "offset", "Start char"), int("length", "length", "Chars (max 4000)")] },
+    CmdSpec { group: "documents", name: "link", op: "documents.link", about: "Link to a claim, fact, opportunity or person", args: &[req("document", "document_id", "Document id"), req("kind", "target_kind", "claim | fact | opportunity | person"), req("target", "target_id", "Target id"), opt("locator", "locator", "Page/span")] },
+    CmdSpec { group: "documents", name: "redact", op: "documents.redact", about: "Re-apply redaction to indexed text", args: &[pos("id", "id", "Document id")] },
+    CmdSpec { group: "documents", name: "export", op: "documents.export", about: "Decrypt a document to a path", args: &[pos("id", "id", "Document id"), req("to", "to", "Destination path")] },
+    CmdSpec { group: "documents", name: "delete", op: "documents.delete", about: "Permanently delete", args: &[pos("id", "id", "Document id"), flag("confirm", "confirm", "Really delete")] },
+    // --- claims
+    CmdSpec { group: "claims", name: "list", op: "claims.list", about: "Claim records", args: &[opt("person", "person_id", "Person id"), opt("status", "status", "Status")] },
+    CmdSpec { group: "claims", name: "show", op: "claims.show", about: "Claim details", args: &[pos("id", "id", "Claim id")] },
+    CmdSpec { group: "claims", name: "init", op: "claims.init", about: "Start tracking a claim", args: &[req("person", "person_id", "Person id"), req("opportunity", "opportunity_id", "Opportunity id")] },
+    CmdSpec { group: "claims", name: "checklist", op: "claims.checklist", about: "Eligibility checklist and warnings", args: &[pos("id", "id", "Claim id")] },
+    CmdSpec { group: "claims", name: "prepare", op: "claims.prepare", about: "Build a local claim package", args: &[req("claim", "claim_id", "Claim id"), list("prefill", "prefill_fields", "name,email,phone,mailing_address"), int("expected-version", "expected_version", "Optimistic concurrency")] },
+    CmdSpec { group: "claims", name: "handoff", op: "claims.handoff", about: "Open the official site (you submit)", args: &[req("claim", "claim_id", "Claim id")] },
+    CmdSpec { group: "claims", name: "record-submission", op: "claims.record_submission", about: "Record that you submitted officially", args: &[req("claim", "claim_id", "Claim id"), opt("confirmation", "confirmation", "Official confirmation id"), opt("document", "document_id", "Receipt document id"), flag("user-confirmed", "user_confirmed", "I really submitted it")] },
+    CmdSpec { group: "claims", name: "update", op: "claims.update", about: "Record a status change", args: &[req("claim", "claim_id", "Claim id"), req("status", "status", "New status"), flag("user-confirmed", "user_confirmed", "External event really happened"), opt("confirmation", "confirmation_id", "Confirmation id"), opt("document", "document_id", "Evidence document"), opt("note", "note", "Note"), int("amount-minor", "amount_minor", "Paid amount in minor units"), opt("currency", "currency", "USD"), int("expected-version", "expected_version", "Optimistic concurrency")] },
+    CmdSpec { group: "claims", name: "history", op: "claims.history", about: "Event history", args: &[req("claim", "claim_id", "Claim id")] },
+    CmdSpec { group: "claims", name: "export", op: "claims.export", about: "Export claims", args: &[opt("person", "person_id", "Person id"), opt("format", "format", "json | csv | markdown")] },
+    CmdSpec { group: "claims", name: "ledger", op: "claims.ledger", about: "Recovered amounts", args: &[] },
+    CmdSpec { group: "claims", name: "prefill-package", op: "claims.prefill_package", about: "Show a prefill package (owner/extension)", args: &[req("package", "package_id", "Package id"), opt("origin", "origin", "Page origin")] },
+    // --- property
+    CmdSpec { group: "property", name: "states", op: "property.states", about: "Official unclaimed-property programs", args: &[opt("kind", "kind", "us_state | us_territory | multi_state | federal | canada | other")] },
+    CmdSpec { group: "property", name: "official-links", op: "property.official_links", about: "Links for jurisdictions", args: &[multi("jurisdictions", "jurisdictions", "State codes")] },
+    CmdSpec { group: "property", name: "checklist", op: "property.checklist", about: "Private per-person checklist", args: &[req("person", "person_id", "Person id")] },
+    CmdSpec { group: "property", name: "research", op: "property.research", about: "Create tracking rows from residence history", args: &[req("person", "person_id", "Person id")] },
+    CmdSpec { group: "property", name: "track", op: "property.track", about: "Record a search result", args: &[req("person", "person_id", "Person id"), req("jurisdiction", "jurisdiction", "State code"), req("status", "status", "to_search | searched_no_match | possible_match | claim_started | claim_submitted | paid | not_mine"), opt("note", "note", "Note"), flag("heir", "heir_claim", "Heir claim")] },
+    CmdSpec { group: "property", name: "history", op: "property.history", about: "Tracking history", args: &[req("person", "person_id", "Person id")] },
+    CmdSpec { group: "property", name: "heir-checklist", op: "property.heir_checklist", about: "Guided heir checklist", args: &[] },
+    // --- alerts
+    CmdSpec { group: "alerts", name: "list", op: "alerts.list", about: "Reminders", args: &[int("due-within-days", "due_within_days", "Horizon"), flag("include-dismissed", "include_dismissed", "Include dismissed")] },
+    CmdSpec { group: "alerts", name: "due", op: "alerts.due", about: "Due now", args: &[] },
+    CmdSpec { group: "alerts", name: "add", op: "alerts.add", about: "Custom reminder", args: &[req("kind", "subject_kind", "opportunity | claim | property | custom"), req("title", "title", "Title"), req("due", "due_at", "YYYY-MM-DD or RFC 3339"), opt("subject", "subject_id", "Subject id")] },
+    CmdSpec { group: "alerts", name: "snooze", op: "alerts.snooze", about: "Snooze", args: &[pos("id", "id", "Alert id"), req("until", "until", "YYYY-MM-DD or RFC 3339")] },
+    CmdSpec { group: "alerts", name: "dismiss", op: "alerts.dismiss", about: "Dismiss", args: &[pos("id", "id", "Alert id")] },
+    CmdSpec { group: "alerts", name: "export-ics", op: "alerts.export_ics", about: "iCalendar export", args: &[opt("path", "path", "Write .ics here")] },
+    // --- jobs
+    CmdSpec { group: "jobs", name: "list", op: "jobs.list", about: "Jobs", args: &[opt("state", "state", "queued | running | …"), opt("kind", "kind", "Kind")] },
+    CmdSpec { group: "jobs", name: "show", op: "jobs.show", about: "Job details", args: &[pos("id", "job_id", "Job id")] },
+    CmdSpec { group: "jobs", name: "enqueue", op: "jobs.enqueue", about: "Queue a job", args: &[req("kind", "kind", "Job kind"), json("params", "params", "Params JSON")] },
+    CmdSpec { group: "jobs", name: "watch", op: "local:jobs_watch", about: "Stream job events (NDJSON)", args: &[pos("id", "job_id", "Job id")] },
+    CmdSpec { group: "jobs", name: "wait", op: "local:jobs_wait", about: "Block until the job finishes", args: &[pos("id", "job_id", "Job id")] },
+    CmdSpec { group: "jobs", name: "cancel", op: "jobs.cancel", about: "Cancel", args: &[pos("id", "job_id", "Job id")] },
+    CmdSpec { group: "jobs", name: "retry", op: "jobs.retry", about: "Requeue", args: &[pos("id", "job_id", "Job id")] },
+    CmdSpec { group: "jobs", name: "history", op: "jobs.history", about: "Events", args: &[pos("id", "job_id", "Job id")] },
+    CmdSpec { group: "jobs", name: "kinds", op: "jobs.kinds", about: "Known kinds", args: &[] },
+    // --- workflows
+    CmdSpec { group: "workflows", name: "list", op: "workflows.list", about: "Registered workflows", args: &[] },
+    CmdSpec { group: "workflows", name: "validate", op: "workflows.validate", about: "Validate a definition file", args: &[file("file", "text", "YAML/JSON file"), opt("name", "name", "Registered name")] },
+    CmdSpec { group: "workflows", name: "register", op: "workflows.register", about: "Register a definition file", args: &[file("file", "text", "YAML/JSON file")] },
+    CmdSpec { group: "workflows", name: "plan", op: "workflows.plan", about: "Preview scopes, network use and approval gates", args: &[file("file", "text", "YAML/JSON file"), opt("name", "name", "Registered name")] },
+    CmdSpec { group: "workflows", name: "run", op: "workflows.run", about: "Start a durable run", args: &[pos("name", "name", "Workflow name"), flag("detach", "detach", "Return immediately (always)")] },
+    CmdSpec { group: "workflows", name: "resume", op: "workflows.resume", about: "Resume from checkpoint", args: &[pos("run", "run_id", "Run id")] },
+    CmdSpec { group: "workflows", name: "status", op: "workflows.status", about: "Run status", args: &[pos("run", "run_id", "Run id")] },
+    CmdSpec { group: "workflows", name: "cancel", op: "workflows.cancel", about: "Cancel a run", args: &[pos("run", "run_id", "Run id")] },
+    CmdSpec { group: "workflows", name: "export", op: "workflows.export", about: "Export as YAML", args: &[pos("name", "name", "Workflow name")] },
+    // --- agents / approvals / audit
+    CmdSpec { group: "agents", name: "list", op: "agents.list", about: "Principals", args: &[] },
+    CmdSpec { group: "agents", name: "register", op: "agents.register", about: "Register an agent; prints its token once", args: &[req("name", "name", "Name"), list("scope", "scopes", "Comma-separated scopes"), int("expires-days", "expires_in_days", "Expiry"), opt("kind", "kind", "agent | extension"), opt("origin", "allowed_origin", "Extension origin")] },
+    CmdSpec { group: "agents", name: "show", op: "agents.show", about: "Principal details", args: &[pos("id", "id", "Agent id")] },
+    CmdSpec { group: "agents", name: "authorize", op: "agents.authorize", about: "Add/remove scopes", args: &[pos("id", "id", "Agent id"), list("add", "add_scopes", "Scopes to add"), list("remove", "remove_scopes", "Scopes to remove")] },
+    CmdSpec { group: "agents", name: "scopes", op: "agents.scopes", about: "All scopes", args: &[] },
+    CmdSpec { group: "agents", name: "sessions", op: "agents.sessions", about: "Active sessions", args: &[] },
+    CmdSpec { group: "agents", name: "revoke", op: "agents.revoke", about: "Revoke (kill switch)", args: &[pos("id", "id", "Agent id")] },
+    CmdSpec { group: "agents", name: "audit", op: "agents.audit", about: "What an agent did and read", args: &[pos("id", "id", "Agent id")] },
+    CmdSpec { group: "approvals", name: "list", op: "approvals.list", about: "Approvals", args: &[opt("state", "state", "pending | approved | denied | expired | consumed")] },
+    CmdSpec { group: "approvals", name: "show", op: "approvals.show", about: "Approval preview", args: &[pos("id", "id", "Approval id")] },
+    CmdSpec { group: "approvals", name: "request", op: "approvals.request", about: "Agent: request a decision", args: &[req("op", "op", "Operation"), json("params", "params", "Params JSON")] },
+    CmdSpec { group: "approvals", name: "approve", op: "approvals.approve", about: "Approve", args: &[pos("id", "id", "Approval id"), opt("note", "note", "Note")] },
+    CmdSpec { group: "approvals", name: "deny", op: "approvals.deny", about: "Deny", args: &[pos("id", "id", "Approval id"), opt("note", "note", "Note")] },
+    CmdSpec { group: "approvals", name: "expire", op: "approvals.expire", about: "Expire overdue", args: &[] },
+    CmdSpec { group: "audit", name: "list", op: "audit.list", about: "Audit trail", args: &[] },
+    CmdSpec { group: "audit", name: "show", op: "audit.show", about: "One entry", args: &[pos("id", "id", "Entry id")] },
+    CmdSpec { group: "audit", name: "export", op: "audit.export", about: "Export", args: &[opt("path", "path", "Write JSON here")] },
+    CmdSpec { group: "audit", name: "verify", op: "audit.verify", about: "Verify hash chain", args: &[] },
+    // --- data / config / schema / mcp / completion / gui / events
+    CmdSpec { group: "data", name: "backup", op: "data.backup", about: "Backup database + vault", args: &[pos("path", "path", "Destination .sqlite path")] },
+    CmdSpec { group: "data", name: "restore", op: "data.restore", about: "Restore from a backup", args: &[pos("path", "path", "Backup path"), flag("confirm", "confirm", "Replace the live database")] },
+    CmdSpec { group: "data", name: "export", op: "data.export", about: "Export your records", args: &[opt("format", "format", "json | csv | markdown"), opt("path", "path", "File or directory")] },
+    CmdSpec { group: "data", name: "import", op: "data.import", about: "Import a JSON export", args: &[pos("path", "path", "Export file")] },
+    CmdSpec { group: "data", name: "integrity", op: "data.integrity", about: "Integrity checks", args: &[] },
+    CmdSpec { group: "data", name: "wipe", op: "data.wipe", about: "Erase local personal data", args: &[req("confirm", "confirm", "Type WIPE"), flag("include-catalog", "include_catalog", "Also delete the catalog")] },
+    CmdSpec { group: "config", name: "show", op: "config.show", about: "All keys", args: &[] },
+    CmdSpec { group: "config", name: "get", op: "config.get", about: "One key", args: &[pos("key", "key", "Key")] },
+    CmdSpec { group: "config", name: "set", op: "config.set", about: "Set a key (value is JSON or text)", args: &[pos("key", "key", "Key"), ArgSpec { name: "value", param: "value", kind: Kind::Json, positional: true, required: true, help: "Value" }] },
+    CmdSpec { group: "config", name: "validate", op: "config.validate", about: "Validate", args: &[] },
+    CmdSpec { group: "config", name: "reset", op: "config.reset", about: "Reset a key or '*'", args: &[pos("key", "key", "Key")] },
+    CmdSpec { group: "schema", name: "export", op: "local:schema_export", about: "Full contract JSON", args: &[opt("format", "format", "json"), opt("file", "file", "Write here")] },
+    CmdSpec { group: "schema", name: "commands", op: "schema.commands", about: "Operations", args: &[] },
+    CmdSpec { group: "schema", name: "describe", op: "schema.describe", about: "One operation", args: &[pos("op", "op", "Operation name")] },
+    CmdSpec { group: "schema", name: "version", op: "schema.version", about: "Versions", args: &[] },
+    CmdSpec { group: "schema", name: "validate", op: "schema.validate", about: "Validate params", args: &[req("op", "op", "Operation"), json("params", "params", "Params JSON")] },
+    CmdSpec { group: "mcp", name: "serve", op: "local:mcp_serve", about: "Run the model-free MCP stdio server", args: &[opt("transport", "transport", "stdio")] },
+    CmdSpec { group: "mcp", name: "inspect", op: "local:mcp_inspect", about: "Show the MCP capability manifest", args: &[] },
+    CmdSpec { group: "mcp", name: "list-tools", op: "local:mcp_list_tools", about: "List MCP tools", args: &[] },
+    CmdSpec { group: "mcp", name: "test", op: "local:mcp_test", about: "Self-test the MCP server over stdio", args: &[] },
+    CmdSpec { group: "completion", name: "powershell", op: "local:completion", about: "PowerShell completions", args: &[] },
+    CmdSpec { group: "completion", name: "bash", op: "local:completion", about: "Bash completions", args: &[] },
+    CmdSpec { group: "completion", name: "zsh", op: "local:completion", about: "Zsh completions", args: &[] },
+    CmdSpec { group: "gui", name: "open", op: "local:gui_open", about: "Print (and open) the local GUI URL", args: &[flag("no-browser", "no_browser", "Only print the URL")] },
+    CmdSpec { group: "events", name: "poll", op: "events.poll", about: "Events after a sequence number", args: &[int("after", "after_seq", "Sequence"), int("limit", "limit", "Max")] },
+];
+
+pub fn groups() -> Vec<&'static str> {
+    let mut g: Vec<&str> = Vec::new();
+    for c in COMMANDS {
+        if !c.group.is_empty() && !g.contains(&c.group) {
+            g.push(c.group);
+        }
+    }
+    g
+}
+
+pub const GROUP_ABOUT: &[(&str, &str)] = &[
+    ("daemon", "Headless service lifecycle"),
+    ("discover", "Find settlements and refunds"),
+    ("opportunities", "Catalog records, rules and provenance"),
+    ("tips", "Community leads (quarantined)"),
+    ("sources", "Free official sources and their health"),
+    ("match", "Deterministic eligibility matching"),
+    ("people", "Local claimant profiles"),
+    ("facts", "Confirmed facts and agent proposals"),
+    ("documents", "Encrypted evidence vault"),
+    ("claims", "Claim tracking and filing assistance (you submit)"),
+    ("property", "Unclaimed-property directory and checklists"),
+    ("alerts", "Deadline reminders"),
+    ("jobs", "Durable background jobs"),
+    ("workflows", "Declarative multi-step runs"),
+    ("agents", "External agent principals and scopes"),
+    ("approvals", "Human decisions for agent actions"),
+    ("audit", "Hash-chained audit trail"),
+    ("data", "Backup, restore, export, import, wipe"),
+    ("config", "Configuration"),
+    ("schema", "Machine-readable contracts"),
+    ("mcp", "Model Context Protocol bridge (no model)"),
+    ("completion", "Shell completions"),
+    ("gui", "Local web GUI"),
+    ("events", "Event feed"),
+];

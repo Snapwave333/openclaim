@@ -1,5 +1,15 @@
 [package]
 name = "openclaim-mcp-adapter"
+description = "Model-free MCP stdio server exposing OpenClaim operations as permissioned tools"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+
+[dependencies]
+openclaim-core.workspace = true
+openclaim-cli-core.workspace = true
+openclaim-domain.workspace = true
+openclaim-security.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true

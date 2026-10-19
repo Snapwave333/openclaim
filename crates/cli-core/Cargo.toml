@@ -1,5 +1,18 @@
 [package]
 name = "openclaim-cli-core"
+description = "Command tree, output contracts and daemon client for the openclaim CLI"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+
+[dependencies]
+openclaim-core.workspace = true
+openclaim-domain.workspace = true
+openclaim-ipc.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+rpassword.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tokio.workspace = true

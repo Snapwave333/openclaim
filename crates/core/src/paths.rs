@@ -19,6 +19,9 @@ impl Paths {
     }
 
     pub fn from_dir(data_dir: PathBuf) -> Paths {
+        // One canonical spelling so every process derives the same IPC name.
+        let _ = std::fs::create_dir_all(&data_dir);
+        let data_dir = std::fs::canonicalize(&data_dir).unwrap_or(data_dir);
         Paths {
             db_path: data_dir.join("openclaim.sqlite"),
             vault_dir: data_dir.join("vault"),
@@ -36,7 +39,8 @@ impl Paths {
     }
 
     pub fn ipc_name(&self) -> String {
-        let digest = openclaim_security::digest::sha256_hex(self.data_dir.to_string_lossy().to_lowercase().as_bytes());
+        let norm = self.data_dir.to_string_lossy().replace('/', "\\").trim_end_matches('\\').trim_start_matches("\\\\?\\").to_lowercase();
+        let digest = openclaim_security::digest::sha256_hex(norm.as_bytes());
         format!("openclaim-{}", &digest[..16])
     }
 
