@@ -1,0 +1,65 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - name: Offline boot and CLI contract check
+        shell: pwsh
+        run: |
+          cargo build --bin openclaim --bin openclaimd
+          $env:OPENCLAIM_HOME = Join-Path $env:RUNNER_TEMP "oc-ci"
+          $env:OPENCLAIM_DEV_ORIGINS = ""
+          & target/debug/openclaim.exe config set network.offline true --output json | Out-Null
+          & target/debug/openclaim.exe daemon ensure --output json | ConvertFrom-Json | Select-Object -ExpandProperty ok
+          & target/debug/openclaim.exe schema export --file command-schema.json --output json | ConvertFrom-Json | Select-Object -ExpandProperty ok
+          & target/debug/openclaim.exe mcp test --output json | ConvertFrom-Json | ForEach-Object { if (-not $_.data.ok) { throw "mcp self-test failed" } }
+          & target/debug/openclaim.exe --no-autostart daemon stop --output json | Out-Null
+      - name: Dependency audit
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
+      - name: No AI runtime in the build graph
+        shell: pwsh
+        run: |
+          $tree = cargo tree --workspace --edges normal
+          foreach ($bad in @("ollama", "llama", "onnx", "candle", "tch", "openai", "anthropic", "tokenizers")) {
+            if ($tree -match "(?i)\b$bad\b") { throw "forbidden dependency: $bad" }
+          }
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: apps/browser-extension
+      - run: npm test
+        working-directory: apps/browser-extension
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: apps/web
+      - run: npm run build
+        working-directory: apps/web
+      - run: npm test -- --watch=false --browsers=ChromeHeadless
+        working-directory: apps/web

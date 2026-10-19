@@ -1547,13 +1547,16 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "futures",
+ "http-body-util",
  "openclaim-core",
  "openclaim-domain",
  "openclaim-security",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tokio-stream",
+ "tower",
  "tracing",
 ]
 
@@ -1673,9 +1676,11 @@ dependencies = [
  "openclaim-cli-core",
  "openclaim-core",
  "openclaim-domain",
+ "openclaim-ipc",
  "openclaim-security",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 

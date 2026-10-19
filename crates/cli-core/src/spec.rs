@@ -222,6 +222,17 @@ pub const COMMANDS: &[CmdSpec] = &[
     },
     CmdSpec {
         group: "",
+        name: "set-passphrase",
+        op: "local:set_passphrase",
+        about: "Change the owner passphrase (prompts for current and new)",
+        args: &[flag(
+            "passphrase-stdin",
+            "passphrase_stdin",
+            "Read current and new passphrase from two stdin lines",
+        )],
+    },
+    CmdSpec {
+        group: "",
         name: "help-json",
         op: "local:help_json",
         about: "Command tree as JSON (same as `help --output json`)",
@@ -1001,6 +1012,13 @@ pub const COMMANDS: &[CmdSpec] = &[
         op: "claims.prefill_package",
         about: "Show a prefill package (owner/extension)",
         args: &[req("package", "package_id", "Package id"), opt("origin", "origin", "Page origin")],
+    },
+    CmdSpec {
+        group: "claims",
+        name: "packages-for-origin",
+        op: "claims.packages_for_origin",
+        about: "Packages prepared for a site origin (ids only)",
+        args: &[req("origin", "origin", "https://host")],
     },
     // --- property
     CmdSpec {

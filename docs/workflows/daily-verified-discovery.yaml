@@ -1,0 +1,21 @@
+# Register: openclaim workflows register --file docs/workflows/daily-verified-discovery.yaml
+# Plan:     openclaim workflows plan --name daily-verified-discovery
+# Run:      openclaim workflows run daily-verified-discovery
+schema_version: 1
+name: daily-verified-discovery
+description: Refresh official sources, list verified open opportunities, re-evaluate matches.
+permissions:
+  - sources.refresh
+  - opportunities.read
+  - match.evaluate
+steps:
+  - id: refresh
+    operation: sources.refresh
+    with: { scope: official }
+  - id: search
+    operation: opportunities.list
+    after: [refresh]
+    with: { only_verified: true, status: [open], sort: deadline, limit: 100 }
+  - id: rematch
+    operation: match.refresh
+    after: [search]

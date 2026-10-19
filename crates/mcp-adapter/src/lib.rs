@@ -183,14 +183,21 @@ impl Server {
 
 /// Serves MCP over stdin/stdout until EOF.
 pub async fn serve_stdio(client: Client, token: Option<String>) -> Result<(), String> {
+    serve(client, token, tokio::io::stdin(), tokio::io::stdout()).await
+}
+
+/// Serves MCP over any line-oriented reader/writer pair (tests use in-memory pipes).
+pub async fn serve<R, W>(client: Client, token: Option<String>, input: R, mut stdout: W) -> Result<(), String>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
     let mut server = Server {
         client,
         token,
         initialized: false,
     };
-    let stdin = tokio::io::stdin();
-    let mut stdout = tokio::io::stdout();
-    let mut reader = BufReader::new(stdin);
+    let mut reader = BufReader::new(input);
     let mut line = String::new();
     loop {
         line.clear();

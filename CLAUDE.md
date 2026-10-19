@@ -2,48 +2,38 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current state
+## What this is
 
-No code exists yet. The only source of truth is `OpenClaim_Master_Design_Record_v1.1.md` (the "MDR"). Section numbers below refer to it. Every command, crate, endpoint and CLI subcommand in the MDR is a **target spec**, not existing software. When you scaffold something, update this file with the real commands. The folder is not a git repository yet.
+OpenClaim: a free, local-first settlement discovery and claims assistant. Rust workspace (daemon `openclaimd`, CLI `openclaim`, MCP adapter) + Angular GUI (`apps/web`) + MV3 browser extension (`apps/browser-extension`). The design record `OpenClaim_Master_Design_Record_v1.1.md` (MDR) is the spec; `docs/` describes what was built.
 
-Build order is the MDR roadmap (§15): Phase 0 foundation (Rust workspace, Angular app, `openclaim` CLI, `openclaimd` daemon, SQLite migrations, local IPC, CI) → Phase 1 FTC/SEC connectors and discovery → Phase 2 rules engine, profiles, evidence vault → Phase 3 filing assistance → Phase 4 full CLI/MCP agent control → Phase 5 hardened release.
-
-## Target commands (§23, adopt once scaffolded)
+## Commands
 
 ```bash
-cargo test --workspace
-cargo test -p <crate> <test_name>          # single Rust test
-cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace                                  # all Rust tests (unit + integration)
+cargo test -p openclaim-core --test flows <name>        # one integration test
+cargo clippy --workspace --all-targets -- -D warnings   # must be clean
 cargo fmt --all -- --check
-npm ci
-npm run test --workspace=apps/web
-npm run build --workspace=apps/web
 cargo build --release --bin openclaim --bin openclaimd
+cd apps/browser-extension && npm ci && npm test         # jsdom tests for the fill logic
+cd apps/web && npm ci && npm run build && npm test      # Angular build + unit tests; `npm run e2e` needs a seeded daemon on 7865
 ```
 
-## Architecture (§6, §7)
+Smoke-test the binaries against a scratch directory: set `OPENCLAIM_HOME` to a temp dir, then `openclaim daemon ensure`, `openclaim init --passphrase-stdin`, `openclaim unlock --passphrase-stdin --output json`, export `OPENCLAIM_SESSION`, `openclaim sources import-snapshot --source ftc-refunds --url https://www.ftc.gov/enforcement/refunds --file test-fixtures/html/ftc_refunds_index.html`. Stop with `openclaim --no-autostart daemon stop`. A running `openclaimd.exe` locks the binary: stop it before `cargo build` of the bins.
 
-- **`openclaimd`** (Rust, Tokio/Axum) is the single source of truth and the **only SQLite writer** (WAL + FTS5). It owns discovery, rules, evidence vault, claims, jobs, scheduler, approvals and audit.
-- **`openclaim` CLI** (clap v4) and the **MCP adapter** (`openclaim mcp serve --transport stdio`) talk to the daemon over authenticated local IPC: a Windows named pipe with an owner-only ACL, or a 0600 Unix socket. They never open the database directly.
-- **Angular GUI** (`apps/web`, strict TS, standalone components, signals) is an optional client over localhost REST + SSE, bound to `127.0.0.1` with Origin checks, a CSRF/session secret and a CORS allowlist. Closing it never cancels daemon jobs.
-- CLI, GUI and MCP call the **same typed domain services**. Any non-visual workflow added to the GUI needs a CLI equivalent (and an MCP tool where §19.2 lists one).
-- Planned layout: `apps/{desktop,web,cli,browser-extension}`, `crates/{api,domain,db,discovery,extract,matching,claims,notifications,jobs,ipc,cli-core,mcp-adapter,agents,security}`, `migrations/`, `source-manifests/`, `test-fixtures/` (public or synthetic data only).
-- Data model: §8. Money uses integer minor units, never floats.
+## Architecture in one paragraph
 
-## Hard constraints (release gates, §3, §14, §24)
+Every capability is an `OpSpec` in the registry (`crates/core/src/ops.rs`, built from each module's `ops()` in `crates/core/src/modules/*`). `Service::execute` (`crates/core/src/dispatch.rs`) resolves the actor (owner session / agent token / anonymous / system), authorizes it (`authz.rs`: scopes, effects, digest-bound approvals), runs the handler in one SQLite transaction (rolled back on `dry_run`), writes audit + command log + events outbox, commits, broadcasts. The CLI table (`crates/cli-core/src/spec.rs`), REST `POST /api/v1/ops/{op}`, MCP tools (`mcp_tool` names) and workflow steps all route through that registry; `crates/cli-core/tests/parity.rs` fails if an op has no CLI row. `openclaimd` is the only SQLite writer; clients reach it over an owner-only named pipe (`crates/ipc`) or localhost HTTP (`crates/api`).
 
-- **No AI inside the product.** No LLM, inference runtime, AI SDK, embeddings, Ollama/llama.cpp/ONNX, or model setting in any binary or build profile. Search is FTS5 + deterministic ranking. Matching is a deterministic three-valued rules AST (§9).
-- **Free only.** Every dependency and source must be $0 and open source. No paid APIs, PACER, paid OCR, captcha solvers, proxies, analytics or payment processors. Each connector manifest declares `price=free`, `auth_requirement`, `robots_policy`, `terms_review_date`, `rate_limit`, `automation_allowed`, and auto-disables if access becomes paid.
-- **No automatic claim submission.** CAPTCHA, identity verification, signatures, payment details and the final Submit always stay with the user. There is no `claims.submit_official` capability.
-- **No fabricated data.** Never insert a placeholder as a live settlement. Unverified opportunities are labeled `verification_pending` and excluded from verified-only views. Eligibility output is only `potential_match | needs_more_information | unlikely | not_applicable | manual_review`, never "eligible", and always with cited reasons.
-- **Agent-proposed facts are untrusted** (`proposed_facts` table) until a human confirms them. Agents get read-only research scope by default. Approvals are digest-bound, expire, and never auto-approve (§20).
-- **Scraped content is untrusted data.** It must never be able to add tools, change scopes or instruct agents through tool output. SSRF defenses on every fetch (§12).
-- Respect robots rules, terms, rate limits and `Retry-After`. A blocked source falls back to an official manual link; it is never bypassed.
+## Rules that are enforced in code (keep them that way)
 
-## CLI contract (§16–§18, §22)
+- No AI anywhere: no model, inference or AI-SDK dependency (CI greps the dependency tree).
+- Free only: connector manifests must say `price: "free"` and `robots_policy: "respect"` (`crates/discovery/src/manifest.rs`).
+- No claim submission: there is no `claims.submit_official` op or scope; `claims.record_submission` requires `user_confirmed` plus a confirmation id or receipt document.
+- Agents never self-grant, approve, wipe, or read sensitive data without a narrowed scope; `Elevated` ops need an approval bound to params + record versions, consumed once.
+- Third-party text is returned wrapped by `openclaim_security::sanitize::untrusted` and never as HTML.
+- Money is integer minor units. Dates are `YYYY-MM-DD` strings validated with `openclaim_domain::dates`.
+- JSON columns end in `_json`; `crate::sql::row_json` strips the suffix and parses them, so read them as `row["params"]` (a `Value`), never `.as_str()`.
 
-- `--output table|text|json|ndjson`. In `json` mode stdout is exactly one envelope (`schema_version`, `ok`, `request_id`, `trace_id`, `data` | `error`, ...). In `ndjson` mode stdout is one event per line. Banners, progress, color and diagnostics go to stderr only.
-- `--dry-run` never mutates, queues jobs, imports files or makes side-effecting requests.
-- `--non-interactive` returns `APPROVAL_REQUIRED` (exit 5) with an `approval_id` instead of prompting.
-- Exit codes 0/2–11 (§22.1) are public API. A failed mutation never exits 0.
-- Long tasks return a durable `job_id`; jobs survive CLI exit, GUI close and daemon restart.
+## Adding things
+
+New op: handler + `op!(...)` in the right module, CLI row in `spec.rs`, test in `crates/core/tests/flows.rs`. New connector: manifest in `source-manifests/`, parser in `crates/discovery/src/parse/`, fixture in `test-fixtures/html/` (public pages only, scripts stripped), tests for normal/changed/blocked pages.

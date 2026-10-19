@@ -96,6 +96,15 @@ async fn local_command(name: &str, spec: &CmdSpec, leaf: &ArgMatches, g: &Global
             }
             Ok(Some(env))
         }
+        "set_passphrase" => {
+            let current = read_passphrase("Current passphrase: ", leaf.get_flag("passphrase-stdin"), g)?;
+            let new = read_passphrase("New passphrase: ", leaf.get_flag("passphrase-stdin"), g)?;
+            Ok(Some(
+                client
+                    .call(&request_for("owner.set_passphrase", json!({"current": current, "new": new}), g))
+                    .await,
+            ))
+        }
         "help_json" => Ok(Some(envelope_from_local(help_json(), g))),
         "daemon_ensure" => {
             let started = client.ensure().await?;
