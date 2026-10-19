@@ -290,13 +290,11 @@ async fn read_bounded(resp: reqwest::Response, max: usize) -> Result<Vec<u8>, St
 }
 
 pub fn default_user_agent(contact: Option<&str>) -> String {
-    let base = format!(
-        "OpenClaim/{} (+https://github.com/openclaim/openclaim; free open-source settlement assistant)",
-        openclaim_domain::VERSION
-    );
+    // Plain "product/version contact" form: SEC.gov's fair-access filter rejects parenthesized comments.
+    let base = format!("OpenClaim/{}", openclaim_domain::VERSION);
     match contact {
         Some(c) if !c.trim().is_empty() => format!("{base} {}", c.trim()),
-        _ => base,
+        _ => format!("{base} +https://github.com/openclaim/openclaim"),
     }
 }
 

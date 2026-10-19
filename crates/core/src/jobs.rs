@@ -339,7 +339,7 @@ impl Service {
         let out = openclaim_discovery::run::run(input).await;
         self.job_progress(job_id, 70, "persisting")?;
         let sid = source_id.clone();
-        self.with_tx(move |conn, now| {
+        let outcome: Result<Result<Value, OcError>, OcError> = self.with_tx(move |conn, now| {
             if cancelled(conn, job_id) {
                 return Err(OcError::new(ErrorCode::Timeout, "cancelled before persisting"));
             }
@@ -366,17 +366,18 @@ impl Service {
                         _ => "retry later; the official site stays the authority".into(),
                     });
                     e.details = Some(json!({"ingested": summary, "notes": out.notes, "requests": out.requests}));
-                    Err(e)
+                    Ok(Err(e))
                 }
                 None => {
                     modules::sources::record_success(conn, &sid, out.etag.clone(), out.last_modified.clone(), manifest.freshness_ttl_hours, now)?;
                     if summary.inserted + summary.changes > 0 {
                         enqueue_conn(conn, "match_refresh", json!({}), "system", Some(job_id), now)?;
                     }
-                    Ok(json!({"source_id": sid, "not_modified": out.not_modified, "requests": out.requests, "ingested": summary, "detail_pages": out.detail_fetched.len(), "notes": out.notes}))
+                    Ok(Ok(json!({"source_id": sid, "not_modified": out.not_modified, "requests": out.requests, "ingested": summary, "detail_pages": out.detail_fetched.len(), "notes": out.notes})))
                 }
             }
-        })
+        });
+        outcome?
     }
 
     async fn job_source_test(&self, params: &Value) -> OcResult<Value> {

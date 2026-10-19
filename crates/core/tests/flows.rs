@@ -641,3 +641,22 @@ fn wipe_and_restore_cycle() {
     assert_eq!(r["schema_version"], "1");
     assert_eq!(h.owner("people.list", json!({}))["items"].as_array().unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn failed_refresh_is_recorded_in_source_health() {
+    let h = harness();
+    h.owner("config.set", json!({"key": "network.offline", "value": true}));
+    // Bypass the offline guard in sources.refresh by enqueueing the job directly, as the scheduler would.
+    h.owner(
+        "jobs.enqueue",
+        json!({"kind": "source_refresh", "params": {"source_id": "naupa-directory", "force": true}}),
+    );
+    h.svc.drain_jobs().await;
+    let health = h.owner("sources.health", json!({}));
+    let naupa = health["items"].as_array().unwrap().iter().find(|s| s["id"] == "naupa-directory").unwrap();
+    assert_eq!(naupa["last_failure"], "offline", "{naupa}");
+    assert_eq!(naupa["health"], "degraded");
+    let jobs = h.owner("jobs.list", json!({"kind": "source_refresh"}));
+    assert_eq!(jobs["items"][0]["state"], "failed");
+    assert_eq!(jobs["items"][0]["error_code"], "POLICY_BLOCKED");
+}

@@ -172,9 +172,13 @@ pub fn build_command() -> Command {
             Arg::new("no-autostart")
                 .long("no-autostart")
                 .global(true)
-                .action(ArgAction::SetTrue)
                 .env("OPENCLAIM_NO_AUTOSTART")
-                .help("Do not start the daemon automatically"),
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value("true")
+                .default_value("false")
+                .value_parser(clap::builder::BoolishValueParser::new())
+                .help("Do not start the daemon automatically (env: 1/true)"),
         );
     for c in spec::COMMANDS.iter().filter(|c| c.group.is_empty()) {
         root = root.subcommand(leaf(c));
@@ -227,7 +231,7 @@ pub fn globals(m: &ArgMatches) -> Globals {
         data_dir,
         session: m.get_one::<String>("session").cloned().filter(|s| !s.is_empty()),
         agent_token: m.get_one::<String>("agent-token").cloned().filter(|s| !s.is_empty()),
-        no_autostart: m.get_flag("no-autostart"),
+        no_autostart: m.get_one::<bool>("no-autostart").copied().unwrap_or(false),
     }
 }
 
