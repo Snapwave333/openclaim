@@ -19,16 +19,28 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - name: Offline boot and CLI contract check
+        timeout-minutes: 10
         shell: pwsh
         run: |
           cargo build --bin openclaim --bin openclaimd
           $env:OPENCLAIM_HOME = Join-Path $env:RUNNER_TEMP "oc-ci"
-          $env:OPENCLAIM_DEV_ORIGINS = ""
-          & target/debug/openclaim.exe config set network.offline true --output json | Out-Null
-          & target/debug/openclaim.exe daemon ensure --output json | ConvertFrom-Json | Select-Object -ExpandProperty ok
-          & target/debug/openclaim.exe schema export --file command-schema.json --output json | ConvertFrom-Json | Select-Object -ExpandProperty ok
-          & target/debug/openclaim.exe mcp test --output json | ConvertFrom-Json | ForEach-Object { if (-not $_.data.ok) { throw "mcp self-test failed" } }
-          Get-Process openclaimd -ErrorAction SilentlyContinue | Stop-Process -Force
+          $env:OPENCLAIM_NO_AUTOSTART = "1"
+          $log = Join-Path $env:RUNNER_TEMP "openclaimd.out"
+          $daemon = Start-Process -FilePath (Resolve-Path target/debug/openclaimd.exe) -ArgumentList @("--data-dir", $env:OPENCLAIM_HOME, "--no-http") -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+          Start-Sleep -Seconds 3
+          try {
+            $status = & target/debug/openclaim.exe daemon status --output json | ConvertFrom-Json
+            if (-not $status.data.reachable) { throw "daemon not reachable" }
+            $schema = & target/debug/openclaim.exe schema export --file command-schema.json --output json | ConvertFrom-Json
+            if (-not $schema.ok) { throw "schema export failed" }
+            $mcp = & target/debug/openclaim.exe mcp test --output json | ConvertFrom-Json
+            if (-not $mcp.data.ok) { throw "mcp self-test failed" }
+            $states = & target/debug/openclaim.exe opportunities list --output json | ConvertFrom-Json
+            if (-not $states.ok) { throw "catalog query failed" }
+          } finally {
+            Stop-Process -Id $daemon.Id -Force -ErrorAction SilentlyContinue
+            Get-Content $log -ErrorAction SilentlyContinue | Select-Object -Last 20
+          }
       - name: Dependency audit
         run: |
           cargo install cargo-audit --locked
