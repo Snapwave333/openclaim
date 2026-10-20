@@ -184,7 +184,13 @@ pub async fn run(input: RunInput) -> RunOutcome {
         let budget = (m.rate_limit.max_requests_per_run.saturating_sub(*fetcher.requests_made.lock().await)).min(m.max_detail_pages) as usize;
         let index_by_key: std::collections::HashMap<String, String> =
             out.opportunities.iter().map(|o| (o.external_key.clone(), o.official_url.clone())).collect();
-        for key in input.detail_due.iter().take(budget) {
+        // First run: nothing is "due" yet, so take the freshly parsed index in order.
+        let due: Vec<String> = if input.detail_due.is_empty() {
+            out.opportunities.iter().map(|o| o.external_key.clone()).collect()
+        } else {
+            input.detail_due.clone()
+        };
+        for key in due.iter().take(budget) {
             let Some(url) = index_by_key.get(key).cloned().or_else(|| known_url(m, key)) else {
                 continue;
             };

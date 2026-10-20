@@ -28,7 +28,8 @@ pub fn parse_index(html: &str, base_url: &str) -> Vec<ParsedOpportunity> {
             let Some(href) = a.value().attr("href") else { continue };
             let Some(u) = absolute(base_url, href) else { continue };
             let title = element_text(a);
-            if title.is_empty() {
+            // The list also links a notices page and the completed-distributions archive; those are not cases.
+            if title.is_empty() || title.starts_with("Distributions in Commission") || title.starts_with("Archive of") {
                 continue;
             }
             let path = url::Url::parse(&u)

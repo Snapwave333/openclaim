@@ -4336,6 +4336,29 @@
       }
     },
     {
+      "name": "claims.packages_for_origin",
+      "scope": "extension.prefill",
+      "effect": "read",
+      "summary": "Packages prepared for the site the extension is on (ids only)",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "OriginParam",
+        "type": "object",
+        "properties": {
+          "origin": {
+            "description": "Page origin (https://host) the extension is on.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "origin"
+        ]
+      }
+    },
+    {
       "name": "alerts.list",
       "scope": "alerts.read",
       "effect": "read",

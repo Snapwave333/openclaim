@@ -203,22 +203,26 @@ pub fn dedupe_key(title: &str, case_number: Option<&str>, administrator: Option<
     )
 }
 
-/// Whether two dedupe keys describe the same settlement. Components that are
-/// blank on one side do not block a merge, but the title must match and at
-/// least one strong identifier (docket or administrator) must match when both
-/// sides carry it.
+/// Whether two dedupe keys describe the same settlement. The title must match and
+/// at least one strong identifier (docket, administrator or class-period start) must
+/// be present on both sides and agree; identifiers present on both sides must never
+/// conflict. A bare title match (a company name) is never enough.
 pub fn same_settlement(a: &str, b: &str) -> bool {
     let pa: Vec<&str> = a.split('|').collect();
     let pb: Vec<&str> = b.split('|').collect();
     if pa.len() != 4 || pb.len() != 4 || pa[0].is_empty() || pa[0] != pb[0] {
         return false;
     }
+    let mut agreed = false;
     for i in 1..4 {
-        if !pa[i].is_empty() && !pb[i].is_empty() && pa[i] != pb[i] {
-            return false;
+        if !pa[i].is_empty() && !pb[i].is_empty() {
+            if pa[i] != pb[i] {
+                return false;
+            }
+            agreed = true;
         }
     }
-    true
+    agreed
 }
 
 #[cfg(test)]
@@ -243,6 +247,10 @@ mod tests {
         let e = dedupe_key("Amazon Refunds", None, Some("JND Legal"), None);
         let f = dedupe_key("Amazon Refunds", None, Some("Rust Consulting"), None);
         assert!(!same_settlement(&e, &f));
+        // Two SEC cases against the same respondent with no shared identifier never merge.
+        let g = dedupe_key("Citigroup Global Markets, Inc.", Some("11-cv-07387"), None, None);
+        let h = dedupe_key("Citigroup Global Markets, Inc.", None, None, None);
+        assert!(!same_settlement(&g, &h));
     }
 
     #[test]

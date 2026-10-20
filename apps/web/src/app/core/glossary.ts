@@ -1,0 +1,23 @@
+/** Plain-language glossary used by tooltips. */
+export const GLOSSARY: Record<string, string> = {
+  verified: 'A person or deterministic parser confirmed this record against the official primary source.',
+  verification_pending: 'Found, but not yet checked against the official source. Treat with caution.',
+  stale: 'The source has not been re-checked recently; details may have changed.',
+  disputed: 'Someone marked this record as uncertain. Check the official source yourself.',
+  potential_match: 'Your stored facts satisfy the verified rules. Only the administrator decides eligibility.',
+  needs_more_information: 'Some rules could not be evaluated because facts are missing.',
+  unlikely: 'Your facts contradict at least one rule.',
+  not_applicable: 'You told OpenClaim you are not part of this class.',
+  manual_review: 'No structured rules are verified yet. Read the official terms.',
+  primary_source: 'Data came directly from the official administrator, court or agency page.',
+  claim_deadline: 'The date the official notice gives for filing. Only reliable when marked verified.',
+  deadline_verified: 'A deadline is verified when it was read from the primary source and checked.',
+  handoff: 'OpenClaim opens the official site for you. You complete and submit the claim yourself.',
+  approval: 'An agent asked permission for an action. Nothing happens until you approve it.',
+  action_digest: 'A fingerprint of the exact action requested. Approving binds to this fingerprint.',
+  scope: 'A permission an agent holds, such as reading sources or evaluating matches.',
+  minor_units: 'Amounts are stored as whole cents to avoid rounding errors.',
+  coverage_gap: 'A blocked or stale source means results may be incomplete, never that there are no settlements.',
+  agent_proposed: 'Suggested by an external agent or an extraction pattern. Not used until you confirm it.',
+  untrusted_text: 'Text copied from a third-party page or document. Shown as plain text; it cannot change anything.',
+};

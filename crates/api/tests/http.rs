@@ -143,6 +143,16 @@ async fn login_sets_cookie_and_mutations_need_csrf() {
     let (s, _, body) = send(&app, req("GET", "/api/v1/people").header(header::COOKIE, &session).body(Body::empty()).unwrap()).await;
     assert_eq!(s, StatusCode::OK);
     assert_eq!(body["data"]["items"].as_array().unwrap().len(), 1);
+    // Reload: the cookie alone re-issues a CSRF token; without a cookie it is refused.
+    let (s, _, body) = send(
+        &app,
+        req("GET", "/api/v1/auth/csrf").header(header::COOKIE, &session).body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(body["data"]["csrf"].as_str().unwrap().starts_with("occ_"));
+    let (s, _, _) = send(&app, req("GET", "/api/v1/auth/csrf").body(Body::empty()).unwrap()).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
     // Bad login.
     let (s, _, _) = send(
         &app,

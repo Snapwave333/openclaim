@@ -347,6 +347,22 @@ async fn logout(State(st): State<AppState>, headers: HeaderMap) -> Result<Respon
     Ok(resp)
 }
 
+/// Re-issues the CSRF token for a valid cookie session (page reloads). Cross-site callers cannot read it: no CORS for GUI origins.
+async fn csrf(State(st): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
+    let Some(session) = cookie_value(&headers) else {
+        return Err(fail(OcError::denied("no session cookie")));
+    };
+    let status = run(&st, Request::new("owner.status", Value::Null), &headers, false).await?;
+    if status.data.as_ref().and_then(|d| d["unlocked"].as_bool()) != Some(true) {
+        return Err(fail(OcError::denied("session is not an unlocked owner session")));
+    }
+    let token = {
+        let mut m = st.csrf.lock().map_err(|_| fail(OcError::internal("lock")))?;
+        m.entry(session).or_insert_with(|| openclaim_security::tokens::new_token("occ")).clone()
+    };
+    Ok(respond(Envelope::success(status.request_id, status.trace_id, json!({"csrf": token}))))
+}
+
 async fn me(State(st): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
     Ok(respond(run(&st, Request::new("owner.status", Value::Null), &headers, false).await?))
 }
@@ -422,6 +438,7 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/login", post(login))
         .route("/auth/logout", post(logout))
         .route("/auth/me", get(me))
+        .route("/auth/csrf", get(csrf))
         .route("/events", get(events))
         .route("/ops/{op}", post(op_handler))
         .route("/opportunities", get(opportunities_list))
