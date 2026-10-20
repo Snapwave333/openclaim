@@ -248,7 +248,7 @@ pub fn decorate(it: &mut Value) {
         o.insert(
             "trust".into(),
             json!({
-                "primary_source": tier == "A",
+                "primary_source": tier == "A" || vs == "verified",
                 "verified_on": o.get("verified_at").cloned().unwrap_or(Value::Null),
                 "verification_state": vs,
                 "claim_deadline": deadline,
@@ -746,6 +746,207 @@ fn op_tip_list(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
     Ok(pager.wrap(rows, None))
 }
 
+/// Outcome of checking an opportunity against its own official site.
+#[derive(Debug, serde::Serialize)]
+pub struct OfficialCheck {
+    pub confirmed: bool,
+    pub matched_terms: Vec<String>,
+    pub deadline: Option<String>,
+    pub class_period: Option<(String, String)>,
+    pub snapshot_id: String,
+    pub reason: String,
+}
+
+fn title_terms(title: &str) -> Vec<String> {
+    const NOISE: &[&str] = &[
+        "class",
+        "action",
+        "settlement",
+        "claims",
+        "claim",
+        "the",
+        "and",
+        "inc",
+        "llc",
+        "corp",
+        "with",
+        "from",
+        "that",
+        "this",
+    ];
+    let mut terms: Vec<String> = title
+        .to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() > 3 && !NOISE.contains(w))
+        .map(str::to_string)
+        .collect();
+    terms.dedup();
+    terms
+}
+
+/// Verifies a listing against the official settlement page (fetched by the daemon or saved by the user).
+/// Confirmation requires the page to name the settlement; a deadline found on the page becomes the verified deadline.
+pub fn confirm_official_page(
+    conn: &openclaim_db::rusqlite::Connection,
+    id: &str,
+    page_url: &str,
+    html: &str,
+    acquisition: &str,
+    now: &str,
+) -> OcResult<OfficialCheck> {
+    let opp = require(
+        query_one(
+            conn,
+            "SELECT id, title, source_id, official_url, claim_url, claim_deadline FROM opportunities WHERE id = ?1",
+            [id],
+        )?,
+        "opportunity",
+        id,
+    )?;
+    let source_id = opp["source_id"]
+        .as_str()
+        .ok_or_else(|| OcError::policy("this record has no source and cannot be verified automatically"))?
+        .to_string();
+    let allowed = [opp["official_url"].as_str(), opp["claim_url"].as_str()]
+        .into_iter()
+        .flatten()
+        .filter_map(|u| url::Url::parse(u).ok())
+        .filter_map(|u| u.host_str().map(str::to_string))
+        .collect::<Vec<_>>();
+    let host = url::Url::parse(page_url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string))
+        .unwrap_or_default();
+    if page_url.starts_with("https://") && !openclaim_security::netpolicy::host_allowed(&host, &allowed) {
+        return Err(OcError::policy(format!(
+            "{host} is not this settlement's official site ({})",
+            allowed.join(", ")
+        )));
+    }
+    if !page_url.starts_with("https://") {
+        return Err(OcError::policy("official pages must be https"));
+    }
+    let text = openclaim_security::sanitize::clean_text(&openclaim_security::sanitize::html_fragment_to_text(html), 400_000);
+    let lower = text.to_lowercase();
+    let terms = title_terms(opp["title"].as_str().unwrap_or(""));
+    let matched: Vec<String> = terms.iter().filter(|t| lower.contains(t.as_str())).cloned().collect();
+    let needed = terms.len().clamp(1, 2);
+    let (snapshot_id, _) = crate::modules::sources::record_snapshot(conn, &source_id, page_url, html, acquisition, None, now)?;
+    if matched.len() < needed {
+        return Ok(OfficialCheck {
+            confirmed: false,
+            matched_terms: matched,
+            deadline: None,
+            class_period: None,
+            snapshot_id,
+            reason: format!(
+                "the page does not mention the settlement ({} of {} name terms found); check the link by hand",
+                0,
+                terms.len()
+            ),
+        });
+    }
+    let deadline = openclaim_discovery::parse::find_deadline(&text);
+    let period = openclaim_discovery::parse::find_class_period(&text);
+    let mut evidence = vec![("title", format!("official page names: {}", matched.join(", ")))];
+    if let Some((_, sentence)) = &deadline {
+        evidence.push(("deadline", sentence.clone()));
+    }
+    if let Some((_, _, sentence)) = &period {
+        evidence.push(("class_period", sentence.clone()));
+    }
+    for (kind, excerpt) in &evidence {
+        exec(
+            conn,
+            "INSERT INTO evidence_links(id, opportunity_id, source_snapshot_id, precise_locator, assertion_type, excerpt, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            (
+                openclaim_db::new_id(),
+                id,
+                &snapshot_id,
+                format!("{page_url}#body"),
+                *kind,
+                openclaim_security::sanitize::clean_text(excerpt, 1000),
+                now,
+            ),
+        )?;
+    }
+    let before_deadline = opp["claim_deadline"].as_str().map(str::to_string);
+    exec(
+        conn,
+        "UPDATE opportunities SET verification_state = 'verified', verified_at = ?2, updated_at = ?2, official_url = ?3,
+            claim_deadline = COALESCE(?4, claim_deadline), deadline_verified = CASE WHEN ?4 IS NOT NULL THEN 1 ELSE deadline_verified END,
+            class_period_start = COALESCE(?5, class_period_start), class_period_end = COALESCE(?6, class_period_end), version = version + 1
+         WHERE id = ?1",
+        (
+            id,
+            now,
+            page_url,
+            deadline.as_ref().map(|d| d.0.clone()),
+            period.as_ref().map(|p| p.0.clone()),
+            period.as_ref().map(|p| p.1.clone()),
+        ),
+    )?;
+    if let Some((d, _)) = &deadline
+        && before_deadline.as_deref() != Some(d.as_str())
+    {
+        exec(
+            conn,
+            "INSERT INTO opportunity_changes(id, opportunity_id, field, old_value, new_value, snapshot_id, detected_at) VALUES (?1,?2,'claim_deadline',?3,?4,?5,?6)",
+            (openclaim_db::new_id(), id, before_deadline, d, &snapshot_id, now),
+        )?;
+    }
+    exec(conn, "UPDATE matches SET stale = 1 WHERE opportunity_id = ?1", [id])?;
+    crate::modules::sources::reindex(conn, id)?;
+    crate::events::emit(conn, "opportunity.changed", json!({"opportunity_id": id, "verified": true}))?;
+    crate::modules::alerts::schedule_deadline_alerts(conn, "opportunity", id, now)?;
+    Ok(OfficialCheck {
+        confirmed: true,
+        matched_terms: matched,
+        deadline: deadline.map(|d| d.0),
+        class_period: period.map(|p| (p.0, p.1)),
+        snapshot_id,
+        reason: "official page names the settlement".into(),
+    })
+}
+
+fn op_verify_official(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
+    let p: IdParam = parse_params(p)?;
+    let opp = load(ctx, &p.id)?;
+    if ctx.offline || crate::modules::config::get_bool(ctx.conn, "network.offline") {
+        return Err(OcError::policy("offline mode: verifying needs one request to the official site")
+            .with_next_action("save the official page and use opportunities.confirm_official"));
+    }
+    let url = opp["official_url"].as_str().ok_or_else(|| OcError::not_found("no official URL to check"))?;
+    if !openclaim_security::netpolicy::is_safe_display_link(url) || !url.starts_with("https://") {
+        return Err(OcError::policy("official URL is not a safe https link"));
+    }
+    let job_id = crate::jobs::enqueue(ctx, "verify_official", json!({"opportunity_id": p.id}), None)?;
+    Ok(json!({"opportunity_id": p.id, "job_id": job_id, "status": "queued", "official_url": url}))
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct ConfirmOfficialParams {
+    pub id: String,
+    /// The official page URL you saved (must be on the settlement's official domain).
+    pub url: String,
+    #[serde(default)]
+    pub html: Option<String>,
+    #[serde(default)]
+    pub file: Option<String>,
+}
+
+fn op_confirm_official(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
+    let p: ConfirmOfficialParams = parse_params(p)?;
+    let html = match (p.html, p.file) {
+        (Some(h), _) => h,
+        (None, Some(f)) => std::fs::read_to_string(&f).map_err(|e| OcError::invalid(format!("read {f}: {e}")))?,
+        (None, None) => return Err(OcError::invalid("provide html or file")),
+    };
+    let check = confirm_official_page(ctx.conn, &p.id, &p.url, &html, "user_snapshot", &ctx.now)?;
+    ctx.audit("opportunities.confirm_official", &p.id, json!({"url": p.url, "confirmed": check.confirmed}))?;
+    Ok(serde_json::to_value(check)?)
+}
+
 pub fn ops() -> Vec<OpSpec> {
     vec![
         op!(
@@ -856,6 +1057,24 @@ pub fn ops() -> Vec<OpSpec> {
             "Owner review: mark verified, disputed or pending",
             VerifyParams,
             op_verify
+        ),
+        op!(
+            "opportunities.verify_official",
+            "opportunities.write",
+            Write,
+            "Check the listing against its official settlement site (one fetch job)",
+            IdParam,
+            op_verify_official,
+            mcp = "verify_official_site",
+            network = true
+        ),
+        op!(
+            "opportunities.confirm_official",
+            "opportunities.write",
+            Elevated,
+            "Verify from a copy of the official page you saved",
+            ConfirmOfficialParams,
+            op_confirm_official
         ),
         op!(
             "opportunities.bookmark",

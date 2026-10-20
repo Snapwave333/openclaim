@@ -329,14 +329,6 @@
       "description": "Register, disable or import snapshots for sources"
     },
     {
-      "scope": "property.read",
-      "description": "Read the official unclaimed-property directory"
-    },
-    {
-      "scope": "property.track",
-      "description": "Track unclaimed-property research for a person"
-    },
-    {
       "scope": "match.evaluate",
       "description": "Run deterministic eligibility evaluation"
     },
@@ -2112,6 +2104,69 @@
       }
     },
     {
+      "name": "opportunities.verify_official",
+      "scope": "opportunities.write",
+      "effect": "write",
+      "summary": "Check the listing against its official settlement site (one fetch job)",
+      "network": true,
+      "mcp_tool": "verify_official_site",
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "IdParam",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "opportunities.confirm_official",
+      "scope": "opportunities.write",
+      "effect": "elevated",
+      "summary": "Verify from a copy of the official page you saved",
+      "network": false,
+      "mcp_tool": null,
+      "resource_param": null,
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ConfirmOfficialParams",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "description": "The official page URL you saved (must be on the settlement's official domain).",
+            "type": "string"
+          },
+          "html": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "file": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id",
+          "url"
+        ]
+      }
+    },
+    {
       "name": "opportunities.bookmark",
       "scope": "opportunities.write",
       "effect": "write",
@@ -2447,188 +2502,6 @@
             "default": null
           }
         }
-      }
-    },
-    {
-      "name": "property.states",
-      "scope": "property.read",
-      "effect": "read",
-      "summary": "Official unclaimed-property programs (50 states, DC, territories, federal, multi-state)",
-      "network": false,
-      "mcp_tool": "list_property_programs",
-      "resource_param": null,
-      "params_schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "StatesParams",
-        "type": "object",
-        "properties": {
-          "kind": {
-            "description": "us_state, us_territory, multi_state, federal, canada, other",
-            "type": [
-              "string",
-              "null"
-            ],
-            "default": null
-          }
-        }
-      }
-    },
-    {
-      "name": "property.official_links",
-      "scope": "property.read",
-      "effect": "read",
-      "summary": "Official search links for given jurisdictions",
-      "network": false,
-      "mcp_tool": null,
-      "resource_param": null,
-      "params_schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "LinksParams",
-        "type": "object",
-        "properties": {
-          "jurisdictions": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "jurisdictions"
-        ]
-      }
-    },
-    {
-      "name": "property.checklist",
-      "scope": "property.track",
-      "effect": "read",
-      "summary": "Private per-person search checklist from residence history",
-      "network": false,
-      "mcp_tool": null,
-      "resource_param": null,
-      "params_schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "PersonParam",
-        "type": "object",
-        "properties": {
-          "person_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "person_id"
-        ]
-      }
-    },
-    {
-      "name": "property.research",
-      "scope": "property.track",
-      "effect": "write",
-      "summary": "Create to-search tracking rows for every state in the residence history",
-      "network": false,
-      "mcp_tool": null,
-      "resource_param": null,
-      "params_schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "PersonParam",
-        "type": "object",
-        "properties": {
-          "person_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "person_id"
-        ]
-      }
-    },
-    {
-      "name": "property.track",
-      "scope": "property.track",
-      "effect": "write",
-      "summary": "Record a user-entered search result or claim status",
-      "network": false,
-      "mcp_tool": null,
-      "resource_param": null,
-      "params_schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "TrackParams",
-        "type": "object",
-        "properties": {
-          "person_id": {
-            "type": "string"
-          },
-          "jurisdiction": {
-            "type": "string"
-          },
-          "status": {
-            "description": "to_search, searched_no_match, possible_match, claim_started, claim_submitted, paid, not_mine",
-            "type": "string"
-          },
-          "note": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "default": null
-          },
-          "heir_claim": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "default": null
-          },
-          "expected_version": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "default": null
-          }
-        },
-        "required": [
-          "person_id",
-          "jurisdiction",
-          "status"
-        ]
-      }
-    },
-    {
-      "name": "property.history",
-      "scope": "property.track",
-      "effect": "read",
-      "summary": "Tracking rows and events for a person",
-      "network": false,
-      "mcp_tool": null,
-      "resource_param": null,
-      "params_schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "PersonParam",
-        "type": "object",
-        "properties": {
-          "person_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "person_id"
-        ]
-      }
-    },
-    {
-      "name": "property.heir_checklist",
-      "scope": "property.read",
-      "effect": "read",
-      "summary": "Guided checklist for heirs' claims",
-      "network": false,
-      "mcp_tool": null,
-      "resource_param": null,
-      "params_schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "Empty",
-        "type": "object"
       }
     },
     {
@@ -4415,7 +4288,7 @@
         "type": "object",
         "properties": {
           "subject_kind": {
-            "description": "opportunity | claim | property | custom",
+            "description": "opportunity | claim | custom",
             "type": "string"
           },
           "subject_id": {

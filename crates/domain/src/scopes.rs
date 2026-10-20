@@ -25,14 +25,7 @@ impl Effect {
     }
 }
 
-pub const PUBLIC_RESEARCH_SCOPES: &[&str] = &[
-    "discover.read",
-    "opportunities.read",
-    "sources.read",
-    "property.read",
-    "schema.read",
-    "daemon.read",
-];
+pub const PUBLIC_RESEARCH_SCOPES: &[&str] = &["discover.read", "opportunities.read", "sources.read", "schema.read", "daemon.read"];
 
 pub const ALL_SCOPES: &[(&str, &str)] = &[
     ("discover.read", "Search and browse the opportunity catalog"),
@@ -41,8 +34,6 @@ pub const ALL_SCOPES: &[(&str, &str)] = &[
     ("sources.read", "Read source registry, health and history"),
     ("sources.refresh", "Start compliant, rate-limited source refresh jobs"),
     ("sources.manage", "Register, disable or import snapshots for sources"),
-    ("property.read", "Read the official unclaimed-property directory"),
-    ("property.track", "Track unclaimed-property research for a person"),
     ("match.evaluate", "Run deterministic eligibility evaluation"),
     ("jobs.read", "Read background job state"),
     ("jobs.manage", "Enqueue, cancel or retry jobs"),

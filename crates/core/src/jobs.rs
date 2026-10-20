@@ -19,6 +19,7 @@ pub const KINDS: &[(&str, &str)] = &[
     ("stale_sweep", "Flag verified records whose source went unreachable"),
     ("integrity_check", "Database integrity and audit-chain verification"),
     ("workflow_run", "Execute a declarative workflow run"),
+    ("verify_official", "Fetch an opportunity's official site and confirm the listing"),
 ];
 
 const LEASE_SECS: i64 = 600;
@@ -291,6 +292,7 @@ impl Service {
             "document_extract" => self.job_document_extract(&params),
             "alert_sweep" => self.job_alert_sweep(),
             "stale_sweep" => self.with_tx(|c, now| Ok(json!({"marked_stale": modules::sources::mark_stale(c, now)?}))),
+            "verify_official" => self.job_verify_official(&params).await,
             "integrity_check" => self.job_integrity(),
             "workflow_run" => self.job_workflow_run(&id, &params).await,
             other => Err(OcError::internal(format!("no handler for job kind {other}"))),
@@ -349,10 +351,10 @@ impl Service {
                 snapshot_ids.push(sid_snap);
             }
             let snapshot_id = snapshot_ids.first().cloned().unwrap_or_else(|| "none".into());
-            let summary = if out.opportunities.is_empty() && out.programs.is_empty() && out.tips.is_empty() {
+            let summary = if out.opportunities.is_empty() && out.tips.is_empty() {
                 modules::sources::IngestSummary::default()
             } else {
-                modules::sources::ingest(conn, &sid, &snapshot_id, manifest.authority_tier, &out.opportunities, &out.programs, &out.tips, now)?
+                modules::sources::ingest(conn, &sid, &snapshot_id, manifest.authority_tier, &out.opportunities, &out.tips, now)?
             };
             match &out.failure {
                 Some((class, detail, retry_after)) => {
@@ -378,6 +380,50 @@ impl Service {
             }
         });
         outcome?
+    }
+
+    async fn job_verify_official(&self, params: &Value) -> OcResult<Value> {
+        let id = params["opportunity_id"].as_str().unwrap_or("").to_string();
+        let (url, offline, contact) = {
+            let guard = self.inner.db.lock().map_err(|_| OcError::internal("db lock"))?;
+            let row = crate::sql::require(
+                query_one(&guard.conn, "SELECT official_url FROM opportunities WHERE id = ?1", [&id])?,
+                "opportunity",
+                &id,
+            )?;
+            (
+                row["official_url"].as_str().unwrap_or("").to_string(),
+                modules::config::get_bool(&guard.conn, "network.offline"),
+                modules::config::get_str(&guard.conn, "network.contact"),
+            )
+        };
+        let fetched = openclaim_discovery::run::fetch_official_page(&url, offline, contact.as_deref())
+            .await
+            .map_err(|e| {
+                let mut err = OcError::new(
+                    if matches!(
+                        e.class,
+                        openclaim_domain::model::FetchFailure::NetworkError | openclaim_domain::model::FetchFailure::HttpError
+                    ) {
+                        ErrorCode::Unavailable
+                    } else {
+                        ErrorCode::PolicyBlocked
+                    },
+                    format!("{}: {}", e.class.as_str(), e.message),
+                );
+                err.retryable = matches!(e.class, openclaim_domain::model::FetchFailure::NetworkError);
+                err.next_action = Some(
+                    "open the official site yourself, save the page, then `openclaim opportunities confirm-official <id> --url <page> --file <saved.html>`"
+                        .into(),
+                );
+                err
+            })?;
+        let body = String::from_utf8_lossy(&fetched.body).into_owned();
+        let final_url = fetched.url.clone();
+        self.with_tx(move |conn, now| {
+            let check = modules::opportunities::confirm_official_page(conn, &id, &final_url, &body, "fetch", now)?;
+            Ok(serde_json::to_value(check)?)
+        })
     }
 
     async fn job_source_test(&self, params: &Value) -> OcResult<Value> {

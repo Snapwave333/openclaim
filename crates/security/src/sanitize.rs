@@ -65,6 +65,9 @@ pub fn html_fragment_to_text(html: &str) -> String {
                     skip_until = if name == "script" { Some("script") } else { Some("style") };
                 } else if matches!(name.as_str(), "p" | "br" | "li" | "div" | "tr" | "h1" | "h2" | "h3" | "h4") {
                     out.push('\n');
+                } else {
+                    // Any other tag boundary separates words ("<td>FORM</td><td>DEADLINE</td>").
+                    out.push(' ');
                 }
                 tag.clear();
             } else {
@@ -109,8 +112,14 @@ mod tests {
     fn html_scripts_are_dropped() {
         let t = html_fragment_to_text("<p>Hello</p><script>alert('x')</script><b>world</b> &amp; more");
         assert!(t.contains("Hello"));
-        assert!(t.contains("world & more"));
+        assert!(clean_text(&t, 100).contains("world & more"), "{t:?}");
         assert!(!t.contains("alert"));
+    }
+
+    #[test]
+    fn inline_tags_separate_words() {
+        let t = html_fragment_to_text("<table><tr><td>FILE A CLAIM FORM</td><td>DEADLINE:</td><td><span>DECEMBER 1, 2026</span></td></tr></table>");
+        assert!(clean_text(&t, 500).contains("FORM DEADLINE: DECEMBER 1, 2026"), "{t:?}");
     }
 
     #[test]

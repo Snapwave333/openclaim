@@ -97,12 +97,6 @@ pub fn export_all(ctx: &Ctx<'_>) -> OcResult<Value> {
         d["metadata"] = m;
         d.as_object_mut().map(|o| o.remove("encrypted_metadata"));
     }
-    let mut tracking = query_all(ctx.conn, "SELECT * FROM property_tracking", [])?;
-    for t in &mut tracking {
-        let n = decrypt_opt(ctx, &t["notes_enc"]);
-        t["notes"] = n;
-        t.as_object_mut().map(|o| o.remove("notes_enc"));
-    }
     Ok(json!({
         "format": "openclaim-export",
         "schema_version": 1,
@@ -119,7 +113,6 @@ pub fn export_all(ctx: &Ctx<'_>) -> OcResult<Value> {
         "document_links": query_all(ctx.conn, "SELECT * FROM document_links", [])?,
         "matches": query_all(ctx.conn, "SELECT * FROM matches", [])?,
         "alerts": query_all(ctx.conn, "SELECT * FROM alerts", [])?,
-        "property_tracking": tracking,
         "bookmarks": query_all(ctx.conn, "SELECT * FROM opportunity_marks", [])?,
         "opportunities": query_all(ctx.conn, "SELECT o.*, (SELECT json_group_array(json_object('assertion_type', e.assertion_type, 'locator', e.precise_locator, 'excerpt', e.excerpt)) FROM evidence_links e WHERE e.opportunity_id = o.id) AS provenance_json FROM opportunities o WHERE o.id IN (SELECT opportunity_id FROM claims UNION SELECT opportunity_id FROM opportunity_marks WHERE bookmarked = 1 UNION SELECT opportunity_id FROM matches WHERE assessment = 'potential_match')", [])?,
     }))
@@ -391,24 +384,6 @@ fn op_import(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         )?;
     }
     counts.insert("claim_events".into(), json!(n));
-    let mut n = 0;
-    for t in data["property_tracking"].as_array().unwrap_or(&vec![]) {
-        let notes = t["notes"].as_str().map(|s| ctx.svc.vault().encrypt_str(s));
-        n += exec(
-            ctx.conn,
-            "INSERT OR IGNORE INTO property_tracking(id, person_id, jurisdiction, status, heir_claim, notes_enc, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-            (
-                t["id"].as_str(),
-                t["person_id"].as_str(),
-                t["jurisdiction"].as_str(),
-                t["status"].as_str().unwrap_or("to_search"),
-                t["heir_claim"].as_bool().unwrap_or(false) as i32,
-                notes,
-                &ctx.now,
-            ),
-        )?;
-    }
-    counts.insert("property_tracking".into(), json!(n));
     crate::jobs::enqueue(ctx, "match_refresh", json!({}), None)?;
     ctx.audit("data.import", &p.path, json!(counts))?;
     Ok(json!({"imported": counts, "note": "documents are not imported from JSON; restore the vault directory from a backup for those"}))
@@ -457,8 +432,6 @@ fn op_wipe(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {
         "document_links",
         "documents_fts",
         "documents",
-        "property_events",
-        "property_tracking",
         "people",
         "alerts",
         "data_disclosures",

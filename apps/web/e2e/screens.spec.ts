@@ -13,14 +13,14 @@ test.describe('screens render against the seeded daemon', () => {
     await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
     await expect(page.locator('[data-tile="potential"]')).toBeVisible();
     await expect(page.getByText(/coverage gap/i).first()).toBeVisible();
-    await expect(page.getByRole('row', { name: /FTC Refund Programs/ })).toBeVisible();
+    await expect(page.getByRole('row', { name: /classaction.org open settlements/ })).toBeVisible();
   });
 
   test('my matches lists the seeded person and explains a match', async () => {
     await page.getByRole('link', { name: 'My Matches' }).click();
     await expect(page.getByLabel('Person', { exact: true })).toContainText('Ann Example');
     await page.getByRole('button', { name: 'Re-evaluate all' }).click();
-    const row = page.locator('[data-opportunity-id]').filter({ hasText: 'Walmart Refunds' }).first();
+    const row = page.locator('[data-opportunity-id]').filter({ hasText: 'Dr. Squatch - All Natural Claims' }).first();
     await expect(row).toBeVisible();
     await row.getByRole('button', { name: 'Why?' }).click();
     await expect(row.locator('[data-explain]')).toContainText('Assessment');
@@ -29,7 +29,7 @@ test.describe('screens render against the seeded daemon', () => {
 
   test('sources page lists connectors and explains blocked = coverage gap', async () => {
     await page.getByRole('link', { name: 'Sources' }).click();
-    await expect(page.locator('[data-source-id="ftc-refunds"]')).toBeVisible();
+    await expect(page.locator('[data-source-id="classaction-org"]')).toBeVisible();
     await expect(page.getByText(/Blocked means coverage gap/)).toBeVisible();
     await expect(page.getByLabel('Page HTML')).toBeVisible();
   });
@@ -41,12 +41,11 @@ test.describe('screens render against the seeded daemon', () => {
     await expect(page.getByRole('progressbar').first()).toBeVisible();
   });
 
-  test('approvals, claims, vault and property pages load', async () => {
-    for (const name of ['Approvals', 'Claims', 'Evidence Vault', 'Property Search'] as const) {
+  test('approvals, claims and vault pages load', async () => {
+    for (const name of ['Approvals', 'Claims', 'Evidence Vault'] as const) {
       await page.getByRole('link', { name }).click();
       await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
     }
-    await expect(page.getByRole('row', { name: /missingmoney|unclaimed|Alberta/i }).first()).toBeVisible();
   });
 
   test('settings has the no-AI statement and a type-to-confirm wipe', async () => {

@@ -1,10 +1,9 @@
 //! Pure parsers. Input: HTML or feed text; output: normalized records with
 //! evidence spans pointing back at the source text. No network here.
 
+pub mod classaction_org;
 pub mod feed;
-pub mod ftc;
-pub mod naupa;
-pub mod sec;
+pub mod scac;
 
 use openclaim_domain::dates::{format_date, month_from_name, parse_date};
 use openclaim_domain::model::{OpportunityStatus, OpportunityType, ProofRequirement};
@@ -102,6 +101,9 @@ static MONTH_YEAR: LazyLock<Regex> =
 static DEADLINE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?is)(?:claim[s]?\s+(?:form[s]?\s+)?(?:must\s+be\s+)?(?:file[d]?|submit(?:ted)?|postmarked|received)|deadline(?:\s+to\s+file)?(?:\s+is)?|file\s+(?:a|your)\s+claim|submit\s+(?:a|your)\s+claim|apply\s+for\s+a\s+(?:refund|payment))[^.]{0,80}?\b(?:by|before|no\s+later\s+than|until|on\s+or\s+before|is)\s+((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},?\s+\d{4})").unwrap()
 });
+static LABELLED_DEADLINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?is)(?:file\s+a\s+claim(?:\s+form)?\s+deadline|claims?\s+(?:form\s+)?(?:filing\s+|submission\s+)?deadline|deadline\s+to\s+(?:file|submit)(?:\s+(?:a|your))?(?:\s+claim)?(?:\s+form)?)\s*[:\-–]?\s*(?:is\s+|submit\s+a\s+claim\s+on\s+or\s+before\s+this\s+date\.?\s*)?((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},?\s+\d{4})").unwrap()
+});
 static CLASS_PERIOD: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\bbetween\s+((?:January|February|March|April|May|June|July|August|September|October|November|December)(?:\s+\d{1,2},?)?\s+\d{4})\s+(?:and|through|to)\s+((?:January|February|March|April|May|June|July|August|September|October|November|December)(?:\s+\d{1,2},?)?\s+\d{4})").unwrap()
 });
@@ -137,7 +139,7 @@ pub fn month_year_to_date(s: &str, end: bool) -> Option<Date> {
 
 /// Finds "file a claim by <date>"-style statements. Returns the date and the sentence.
 pub fn find_deadline(text: &str) -> Option<(String, String)> {
-    let c = DEADLINE.captures(text)?;
+    let c = DEADLINE.captures(text).or_else(|| LABELLED_DEADLINE.captures(text))?;
     let d = prose_to_date(&c[1])?;
     let whole = c.get(0)?;
     let sentence = sentence_around(text, whole.start(), whole.end());
@@ -253,6 +255,23 @@ mod tests {
         let (a, b, _) = find_class_period(t).unwrap();
         assert_eq!((a.as_str(), b.as_str()), ("2015-01-01", "2024-12-31"));
         assert!(find_deadline("If you get a check, please cash it within 90 days.").is_none());
+        assert_eq!(
+            find_deadline("YOUR LEGAL RIGHTS: FILE A CLAIM FORM DEADLINE: DECEMBER 1, 2026 EXCLUDE YOURSELF DEADLINE: DECEMBER 1, 2026")
+                .unwrap()
+                .0,
+            "2026-12-01"
+        );
+        assert_eq!(
+            find_deadline("Important Dates Claim Deadline Submit a claim on or before this date. Dec 01 2026 Exclusion Deadline")
+                .unwrap()
+                .0,
+            "2026-12-01"
+        );
+        assert_eq!(find_deadline("Claim Deadline: January 5, 2027").unwrap().0, "2027-01-05");
+        assert!(
+            find_deadline("Exclusion Deadline: January 5, 2027").is_none(),
+            "exclusion deadlines are not claim deadlines"
+        );
     }
 
     #[test]

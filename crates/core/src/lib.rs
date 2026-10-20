@@ -85,12 +85,11 @@ impl Service {
         Ok(svc)
     }
 
-    /// Seeds bundled connectors, schedules and the property directory on first run.
+    /// Seeds bundled connectors and schedules on first run.
     fn bootstrap(&self) -> OcResult<()> {
         let mut guard = self.inner.db.lock().map_err(|_| OcError::internal("database lock poisoned"))?;
         let tx = guard.conn.transaction().map_err(openclaim_db::db_err)?;
         modules::sources::seed(&tx)?;
-        modules::property::seed(&tx)?;
         jobs::seed_schedules(&tx)?;
         tx.commit().map_err(openclaim_db::db_err)?;
         Ok(())

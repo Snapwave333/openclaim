@@ -143,7 +143,7 @@ fn op_due(ctx: &mut Ctx<'_>, _p: Value) -> OcResult<Value> {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct AddParams {
-    /// opportunity | claim | property | custom
+    /// opportunity | claim | custom
     pub subject_kind: String,
     #[serde(default)]
     pub subject_id: Option<String>,

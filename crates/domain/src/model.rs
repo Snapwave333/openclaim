@@ -63,10 +63,8 @@ string_enum! {
 
 string_enum! {
     OpportunityType {
-        GovernmentRefund => "government_refund",
-        InvestorDistribution => "investor_distribution",
         ClassAction => "class_action",
-        UnclaimedProperty => "unclaimed_property",
+        SecuritiesClassAction => "securities_class_action",
         Other => "other",
     }
 }

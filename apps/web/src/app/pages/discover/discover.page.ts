@@ -17,7 +17,7 @@ interface CompareRow { id: string; title: string; [k: string]: unknown }
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [BadgeComponent, OpportunityCardComponent, PageHeaderComponent],
   template: `
-    <oc-page-header title="Discover" subtitle="Search the local catalog of settlements, refunds and distributions. Every record links to its official source." />
+    <oc-page-header title="Discover" subtitle="Search the local catalog of class-action settlements. Every record links to the official settlement site; verify there before relying on a deadline." />
 
     <form class="card" (submit)="search($event)" aria-label="Search and filters">
       <div class="row">

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-OpenClaim: a free, local-first settlement discovery and claims assistant. Rust workspace (daemon `openclaimd`, CLI `openclaim`, MCP adapter) + Angular GUI (`apps/web`) + MV3 browser extension (`apps/browser-extension`). The design record `OpenClaim_Master_Design_Record_v1.1.md` (MDR) is the spec; `docs/` describes what was built.
+OpenClaim: a free, local-first class-action settlement finder and claims assistant. Rust workspace (daemon `openclaimd`, CLI `openclaim`, MCP adapter) + Angular GUI (`apps/web`) + MV3 browser extension (`apps/browser-extension`). The design record `OpenClaim_Master_Design_Record_v1.1.md` (MDR) is the spec; `docs/` describes what was built.
 
 ## Commands
 
@@ -18,7 +18,7 @@ cd apps/browser-extension && npm ci && npm test         # jsdom tests for the fi
 cd apps/web && npm ci && npm run build && npm test      # Angular build + unit tests; `npm run e2e` needs a seeded daemon on 7865
 ```
 
-Smoke-test the binaries against a scratch directory: set `OPENCLAIM_HOME` to a temp dir, then `openclaim daemon ensure`, `openclaim init --passphrase-stdin`, `openclaim unlock --passphrase-stdin --output json`, export `OPENCLAIM_SESSION`, `openclaim sources import-snapshot --source ftc-refunds --url https://www.ftc.gov/enforcement/refunds --file test-fixtures/html/ftc_refunds_index.html`. Stop with `openclaim --no-autostart daemon stop`. A running `openclaimd.exe` locks the binary: stop it before `cargo build` of the bins.
+Smoke-test the binaries against a scratch directory: set `OPENCLAIM_HOME` to a temp dir, then `openclaim daemon ensure`, `openclaim init --passphrase-stdin`, `openclaim unlock --passphrase-stdin --output json`, export `OPENCLAIM_SESSION`, `openclaim sources import-snapshot --source classaction-org --url https://www.classaction.org/settlements --file test-fixtures/html/classaction_org_settlements.html`. Stop with `openclaim --no-autostart daemon stop`. A running `openclaimd.exe` locks the binary: stop it before `cargo build` of the bins.
 
 ## Architecture in one paragraph
 
@@ -27,7 +27,7 @@ Every capability is an `OpSpec` in the registry (`crates/core/src/ops.rs`, built
 ## Rules that are enforced in code (keep them that way)
 
 - No AI anywhere: no model, inference or AI-SDK dependency (CI greps the dependency tree).
-- Free only: connector manifests must say `price: "free"` and `robots_policy: "respect"` (`crates/discovery/src/manifest.rs`).
+- Free only: connector manifests must say `price: "free"` and `robots_policy: "respect"` (`crates/discovery/src/manifest.rs`). Sources are class-action listings (classaction.org, Stanford SCAC); a listing stays `verification_pending` until `opportunities.verify_official`/`confirm_official` checks the settlement's own site.
 - No claim submission: there is no `claims.submit_official` op or scope; `claims.record_submission` requires `user_confirmed` plus a confirmation id or receipt document.
 - Agents never self-grant, approve, wipe, or read sensitive data without a narrowed scope; `Elevated` ops need an approval bound to params + record versions, consumed once.
 - Third-party text is returned wrapped by `openclaim_security::sanitize::untrusted` and never as HTML.

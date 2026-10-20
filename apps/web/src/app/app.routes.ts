@@ -13,7 +13,6 @@ export const routes: Routes = [
       { path: 'matches', loadComponent: () => import('./pages/matches/matches.page').then((m) => m.MatchesPage), title: 'My Matches · OpenClaim' },
       { path: 'claims', loadComponent: () => import('./pages/claims/claims.page').then((m) => m.ClaimsPage), title: 'Claims · OpenClaim' },
       { path: 'claims/:id', loadComponent: () => import('./pages/claims/claim-detail.page').then((m) => m.ClaimDetailPage), title: 'Claim · OpenClaim' },
-      { path: 'property', loadComponent: () => import('./pages/property/property.page').then((m) => m.PropertyPage), title: 'Property Search · OpenClaim' },
       { path: 'vault', loadComponent: () => import('./pages/vault/vault.page').then((m) => m.VaultPage), title: 'Evidence Vault · OpenClaim' },
       { path: 'sources', loadComponent: () => import('./pages/sources/sources.page').then((m) => m.SourcesPage), title: 'Sources · OpenClaim' },
       { path: 'agents', loadComponent: () => import('./pages/agents/agents.page').then((m) => m.AgentsPage), title: 'Agent Activity · OpenClaim' },

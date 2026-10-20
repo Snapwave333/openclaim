@@ -10,7 +10,6 @@ pub mod jobs_ops;
 pub mod matching;
 pub mod opportunities;
 pub mod people;
-pub mod property;
 pub mod schema;
 pub mod sources;
 pub mod workflows;

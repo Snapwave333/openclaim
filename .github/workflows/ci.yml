@@ -8,6 +8,7 @@ on:
 jobs:
   rust:
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -27,7 +28,7 @@ jobs:
           & target/debug/openclaim.exe daemon ensure --output json | ConvertFrom-Json | Select-Object -ExpandProperty ok
           & target/debug/openclaim.exe schema export --file command-schema.json --output json | ConvertFrom-Json | Select-Object -ExpandProperty ok
           & target/debug/openclaim.exe mcp test --output json | ConvertFrom-Json | ForEach-Object { if (-not $_.data.ok) { throw "mcp self-test failed" } }
-          & target/debug/openclaim.exe --no-autostart daemon stop --output json | Out-Null
+          Get-Process openclaimd -ErrorAction SilentlyContinue | Stop-Process -Force
       - name: Dependency audit
         run: |
           cargo install cargo-audit --locked

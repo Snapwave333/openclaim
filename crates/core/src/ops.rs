@@ -47,7 +47,6 @@ static REGISTRY: LazyLock<Vec<OpSpec>> = LazyLock::new(|| {
     all.extend(crate::modules::daemon::ops());
     all.extend(crate::modules::sources::ops());
     all.extend(crate::modules::opportunities::ops());
-    all.extend(crate::modules::property::ops());
     all.extend(crate::modules::people::ops());
     all.extend(crate::modules::facts::ops());
     all.extend(crate::modules::documents::ops());

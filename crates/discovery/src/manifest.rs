@@ -6,9 +6,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectorKind {
-    FtcRefunds,
-    SecDistributions,
-    NaupaDirectory,
+    ClassActionOrg,
+    StanfordScac,
     Feed,
 }
 
@@ -88,9 +87,8 @@ impl ConnectorManifest {
 }
 
 pub const BUNDLED_MANIFESTS: &[&str] = &[
-    include_str!("../../../source-manifests/ftc-refunds.json"),
-    include_str!("../../../source-manifests/sec-distributions.json"),
-    include_str!("../../../source-manifests/naupa-directory.json"),
+    include_str!("../../../source-manifests/classaction-org.json"),
+    include_str!("../../../source-manifests/stanford-scac.json"),
 ];
 
 pub fn bundled() -> Vec<ConnectorManifest> {
@@ -107,7 +105,7 @@ mod tests {
     #[test]
     fn bundled_manifests_validate_and_are_free() {
         let all = bundled();
-        assert_eq!(all.len(), 3);
+        assert_eq!(all.len(), 2);
         assert!(all.iter().all(|m| m.price == "free" && m.robots_policy == "respect"));
     }
 

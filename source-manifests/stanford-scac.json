@@ -1,0 +1,19 @@
+{
+  "id": "stanford-scac",
+  "name": "Stanford Securities Class Action Clearinghouse",
+  "connector": "stanford_scac",
+  "url": "https://securities.stanford.edu/filings.html",
+  "authority_tier": "A",
+  "price": "free",
+  "auth_requirement": "none",
+  "robots_policy": "respect",
+  "terms_url": "https://securities.stanford.edu/about-the-scac.html",
+  "terms_review_date": "2026-10-19",
+  "rate_limit": { "min_interval_ms": 2000, "max_requests_per_run": 30 },
+  "automation_allowed": true,
+  "allowed_hosts": ["securities.stanford.edu"],
+  "freshness_ttl_hours": 24,
+  "follow_detail_pages": true,
+  "max_detail_pages": 25,
+  "notes": "Free, authoritative index of federal securities class actions (Stanford Law School / Cornerstone Research). Cases are leads for investors; a settlement, if any, is administered elsewhere."
+}

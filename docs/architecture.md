@@ -10,8 +10,8 @@ External agent / terminal / browser extension / Angular GUI
 │   → one SQLite transaction per command (rolled back on dry run)│
 │   → audit + command_runs + events outbox → commit → broadcast  │
 │ Jobs: leases, retries, cancellation, crash recovery, schedules │
-│ Modules: sources · opportunities · property · people · facts   │
-│   documents · matching · claims · alerts · workflows · agents  │
+│ Modules: sources · opportunities · people · facts · documents  │
+│   matching · claims · alerts · workflows · agents · data       │
 ├────────────────────────┬───────────────────────────────────────┤
 │ SQLite WAL + FTS5      │ Encrypted vault files (XChaCha20)     │
 └────────────────────────┴───────────────────────────────────────┘
@@ -25,7 +25,7 @@ External agent / terminal / browser extension / Angular GUI
 | `security` | Vault encryption (DPAPI-wrapped key on Windows), tokens/passphrases (argon2), redaction, untrusted-text sanitizing, SSRF/URL policy, canonical JSON digests. |
 | `db` | SQLite open/migrate (WAL, FTS5, foreign keys), integrity, backup. |
 | `extract` | On-device PDF text, EML/MBOX, CSV/text, optional Tesseract OCR, deterministic fact suggestions with spans. |
-| `discovery` | Connector manifests (provider gate), policy-gated fetcher (robots, rate limits, allowlists, redirect checks, bounded bodies), parsers for FTC/SEC/NAUPA/feeds. |
+| `discovery` | Connector manifests (provider gate), policy-gated fetcher (robots, rate limits, allowlists, redirect checks, bounded bodies), parsers for classaction.org, Stanford SCAC and feeds, official-site verification fetch. |
 | `core` | The operation registry and everything behind it: dispatch, authorization, approvals, jobs, workflows, audit, every module. |
 | `ipc` | Named pipe (owner-only ACL) / Unix socket transport. |
 | `api` | Axum REST + SSE + static GUI with Host/Origin/CSRF/CSP defenses. |
@@ -52,7 +52,7 @@ Effects: `Read`, `Write` (agents need the scope), `Elevated` (agents need scope 
 
 ## Jobs
 
-SQLite-backed queue with leases (`lease_expires_at`), heartbeats via progress updates, exponential retry for retryable errors, cancellation points, crash recovery on start (`recover_jobs`), schedules (sources hourly check honoring per-source TTL, alerts every 15 min, stale sweep 6 h, integrity weekly). Workflow runs are jobs with checkpoints; approval pauses set `paused_for_approval` and resume after the decision.
+SQLite-backed queue with leases (`lease_expires_at`), heartbeats via progress updates, exponential retry for retryable errors, cancellation points, crash recovery on start (`recover_jobs`), schedules (sources hourly check honoring per-source TTL, alerts every 15 min, stale sweep 6 h, integrity weekly). `verify_official` jobs fetch one settlement site each. Workflow runs are jobs with checkpoints; approval pauses set `paused_for_approval` and resume after the decision.
 
 ## Data at rest
 

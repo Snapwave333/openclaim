@@ -1,0 +1,17 @@
+{
+  "id": "classaction-org",
+  "name": "classaction.org open settlements",
+  "connector": "class_action_org",
+  "url": "https://www.classaction.org/settlements",
+  "authority_tier": "B",
+  "price": "free",
+  "auth_requirement": "none",
+  "robots_policy": "respect",
+  "terms_url": "https://www.classaction.org/terms-of-use",
+  "terms_review_date": "2026-10-19",
+  "rate_limit": { "min_interval_ms": 5000, "max_requests_per_run": 2 },
+  "automation_allowed": true,
+  "allowed_hosts": ["classaction.org"],
+  "freshness_ttl_hours": 24,
+  "notes": "Public listing of open class-action settlements with the official administrator site for each. A listing is a lead: records stay verification_pending until the official site is checked with `openclaim opportunities verify-official`."
+}

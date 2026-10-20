@@ -64,45 +64,25 @@ pub type Parsed = (Vec<ParsedOpportunity>, Vec<ParsedProgram>, Vec<ParsedTip>);
 pub fn parse_page(kind: ConnectorKind, url: &str, html: &str, today: Date) -> Result<Parsed, String> {
     let path = url::Url::parse(url).map(|u| u.path().trim_end_matches('/').to_string()).unwrap_or_default();
     match kind {
-        ConnectorKind::FtcRefunds => {
-            if parse::ftc::is_block_page(html) {
-                return Err("this is the ftc.gov anti-automation page, not a refund page".into());
+        ConnectorKind::ClassActionOrg => {
+            let rows = parse::classaction_org::parse_index(html, url, today);
+            if rows.is_empty() {
+                return Err("no settlement cards found: the classaction.org layout may have changed".into());
             }
-            if path == "/enforcement/refunds" {
-                let rows = parse::ftc::parse_index(html, url);
+            Ok((rows, vec![], vec![]))
+        }
+        ConnectorKind::StanfordScac => {
+            if path.ends_with("/filings.html") {
+                let rows = parse::scac::parse_index(html, url);
                 if rows.is_empty() {
-                    return Err("no refund rows found: the FTC page layout may have changed".into());
+                    return Err("no filings found: the SCAC layout may have changed".into());
                 }
                 Ok((rows, vec![], vec![]))
             } else {
-                parse::ftc::parse_detail(html, url, today)
+                parse::scac::parse_detail(html, url)
                     .map(|o| (vec![o], vec![], vec![]))
-                    .ok_or_else(|| "no refund program found on this page".into())
+                    .ok_or_else(|| "no case summary found on this page".into())
             }
-        }
-        ConnectorKind::SecDistributions => {
-            if parse::sec::is_block_page(html) {
-                return Err("this is the sec.gov rate-limit page, not a distribution page".into());
-            }
-            if path == "/enforcement-litigation/distributions-harmed-investors" {
-                let rows = parse::sec::parse_index(html, url);
-                if rows.is_empty() {
-                    return Err("no cases found: the SEC page layout may have changed".into());
-                }
-                Ok((rows, vec![], vec![]))
-            } else {
-                parse::sec::parse_detail(html, url, today)
-                    .map(|o| (vec![o], vec![], vec![]))
-                    .ok_or_else(|| "no distribution case found on this page".into())
-            }
-        }
-        ConnectorKind::NaupaDirectory => {
-            let mut programs = parse::naupa::parse_directory(html, url);
-            if programs.is_empty() {
-                return Err("no program links found: the NAUPA page layout may have changed".into());
-            }
-            programs.extend(parse::naupa::fixed_programs());
-            Ok((vec![], programs, vec![]))
         }
         ConnectorKind::Feed => {
             let tips = parse::feed::parse_feed(html.as_bytes());
@@ -112,6 +92,33 @@ pub fn parse_page(kind: ConnectorKind, url: &str, html: &str, today: Date) -> Re
             Ok((vec![], vec![], tips))
         }
     }
+}
+
+/// Fetches one official settlement page for verification. The allowlist is the page's own host;
+/// every other defense (https only, SSRF-safe DNS, no cross-host redirects, bounded body) still applies.
+pub async fn fetch_official_page(url: &str, offline: bool, contact: Option<&str>) -> Result<crate::fetch::Fetched, crate::fetch::FetchError> {
+    let host = url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string))
+        .ok_or_else(|| crate::fetch::FetchError {
+            class: FetchFailure::PolicyBlocked,
+            message: "official URL has no host".into(),
+            retry_after_secs: None,
+        })?;
+    let fetcher = Fetcher::new(FetchPolicy {
+        user_agent: default_user_agent(contact),
+        allowed_hosts: vec![host],
+        min_interval: Duration::from_millis(2000),
+        max_body: crate::fetch::DEFAULT_MAX_BODY,
+        timeout: Duration::from_secs(45),
+        offline,
+    })
+    .map_err(|e| crate::fetch::FetchError {
+        class: FetchFailure::NetworkError,
+        message: e,
+        retry_after_secs: None,
+    })?;
+    fetcher.get(url, None).await
 }
 
 pub async fn run(input: RunInput) -> RunOutcome {
@@ -263,43 +270,43 @@ mod tests {
     fn parse_page_routes_by_url() {
         let today = openclaim_domain::dates::parse_date("2026-10-19").unwrap();
         let (o, _, _) = parse_page(
-            ConnectorKind::FtcRefunds,
-            "https://www.ftc.gov/enforcement/refunds",
-            include_str!("../../../test-fixtures/html/ftc_refunds_index.html"),
+            ConnectorKind::ClassActionOrg,
+            "https://www.classaction.org/settlements",
+            include_str!("../../../test-fixtures/html/classaction_org_settlements.html"),
             today,
         )
         .unwrap();
-        assert!(o.len() > 10);
+        assert_eq!(o.len(), 8);
         let (o, _, _) = parse_page(
-            ConnectorKind::FtcRefunds,
-            "https://www.ftc.gov/enforcement/refunds/walmart-refunds",
-            include_str!("../../../test-fixtures/html/ftc_refund_walmart.html"),
+            ConnectorKind::StanfordScac,
+            "https://securities.stanford.edu/filings.html",
+            include_str!("../../../test-fixtures/html/scac_filings.html"),
+            today,
+        )
+        .unwrap();
+        assert_eq!(o.len(), 12);
+        let (o, _, _) = parse_page(
+            ConnectorKind::StanfordScac,
+            "https://securities.stanford.edu/filings-case.html?id=108640",
+            include_str!("../../../test-fixtures/html/scac_case_108640.html"),
             today,
         )
         .unwrap();
         assert_eq!(o.len(), 1);
         assert!(
             parse_page(
-                ConnectorKind::FtcRefunds,
-                "https://www.ftc.gov/enforcement/refunds",
-                "<p>abusive automated request</p>",
+                ConnectorKind::ClassActionOrg,
+                "https://www.classaction.org/settlements",
+                "<p>changed</p>",
                 today
             )
             .is_err()
         );
-        let (_, p, _) = parse_page(
-            ConnectorKind::NaupaDirectory,
-            "https://unclaimed.org/search/",
-            include_str!("../../../test-fixtures/html/naupa_search.html"),
-            today,
-        )
-        .unwrap();
-        assert!(p.iter().any(|x| x.jurisdiction == "US-MISSINGMONEY"));
     }
 
     #[tokio::test]
     async fn offline_run_reports_offline() {
-        let m = crate::manifest::bundled().into_iter().find(|m| m.id == "ftc-refunds").unwrap();
+        let m = crate::manifest::bundled().into_iter().find(|m| m.id == "classaction-org").unwrap();
         let out = run(RunInput {
             manifest: m,
             prior_etag: None,
@@ -311,21 +318,5 @@ mod tests {
         })
         .await;
         assert_eq!(out.failure.unwrap().0, FetchFailure::Offline);
-    }
-
-    #[tokio::test]
-    async fn sec_requires_contact() {
-        let m = crate::manifest::bundled().into_iter().find(|m| m.id == "sec-distributions").unwrap();
-        let out = run(RunInput {
-            manifest: m,
-            prior_etag: None,
-            prior_last_modified: None,
-            offline: true,
-            contact: None,
-            today: openclaim_domain::dates::parse_date("2026-10-19").unwrap(),
-            detail_due: vec![],
-        })
-        .await;
-        assert_eq!(out.failure.unwrap().0, FetchFailure::PolicyBlocked);
     }
 }

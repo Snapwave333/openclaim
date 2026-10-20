@@ -146,6 +146,8 @@ async fn run(args: Args) -> i32 {
         _ = svc.inner.shutdown.notified() => { tracing::info!("stop requested"); }
     }
     svc.inner.stop_requested.store(true, std::sync::atomic::Ordering::SeqCst);
+    // Let the request that asked us to stop (and any other in-flight reply) finish writing first.
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
     svc.inner.shutdown.notify_waiters();
     let _ = tokio::time::timeout(std::time::Duration::from_secs(30), jobs).await;
     let _ = tokio::time::timeout(std::time::Duration::from_secs(5), ipc_task).await;

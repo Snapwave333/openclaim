@@ -25,7 +25,7 @@ test.describe('axe: unlocked pages', () => {
 
   test('axe: overview', async () => {
     await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
-    await expect(page.getByRole('row', { name: /FTC Refund Programs/ })).toBeVisible();
+    await expect(page.getByRole('row', { name: /classaction.org open settlements/ })).toBeVisible();
     await audit(page, 'overview');
   });
 

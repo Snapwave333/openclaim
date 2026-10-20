@@ -70,7 +70,7 @@ fn clap_tree_builds_and_help_json_lists_every_row() {
         ["claims", "prepare"],
         ["claims", "handoff"],
         ["claims", "record-submission"],
-        ["property", "states"],
+        ["opportunities", "verify-official"],
         ["alerts", "export-ics"],
         ["jobs", "watch"],
         ["workflows", "plan"],

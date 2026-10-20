@@ -4,8 +4,16 @@ use openclaim_core::{Paths, Request, Service};
 use openclaim_domain::ErrorCode;
 use serde_json::{Value, json};
 
-const FTC_INDEX: &str = include_str!("../../../test-fixtures/html/ftc_refunds_index.html");
-const FTC_WALMART: &str = include_str!("../../../test-fixtures/html/ftc_refund_walmart.html");
+const LISTING: &str = include_str!("../../../test-fixtures/html/classaction_org_settlements.html");
+const LISTING_URL: &str = "https://www.classaction.org/settlements";
+const OFFICIAL_URL: &str = "https://www.personalcareproductssettlement.com/";
+
+/// A synthetic copy of the Dr. Squatch official settlement page.
+fn official_page(deadline_sentence: &str) -> String {
+    format!(
+        "<html><body><h1>Dr. Squatch All Natural Claims Settlement</h1><p>If you bought certain Dr. Squatch products between November 1, 2018 and August 29, 2026 you may be a class member.</p><p>{deadline_sentence}</p></body></html>"
+    )
+}
 
 struct Harness {
     svc: Service,
@@ -51,22 +59,26 @@ impl Harness {
         self.svc.execute(req)
     }
 
-    fn import_ftc(&self) {
+    fn import_listing(&self) {
         let r = self.owner(
             "sources.import_snapshot",
-            json!({"source_id": "ftc-refunds", "url": "https://www.ftc.gov/enforcement/refunds", "html": FTC_INDEX}),
+            json!({"source_id": "classaction-org", "url": LISTING_URL, "html": LISTING}),
         );
-        assert!(r["parsed"].as_u64().unwrap() > 10);
-        let r = self.owner(
-            "sources.import_snapshot",
-            json!({"source_id": "ftc-refunds", "url": "https://www.ftc.gov/enforcement/refunds/walmart-refunds", "html": FTC_WALMART}),
-        );
-        assert_eq!(r["parsed"], 1);
+        assert_eq!(r["parsed"], 8);
     }
 
-    fn walmart_id(&self) -> String {
-        let r = self.owner("opportunities.list", json!({"q": "walmart"}));
+    fn squatch_id(&self) -> String {
+        let r = self.owner("opportunities.list", json!({"q": "squatch"}));
         r["items"][0]["id"].as_str().unwrap().to_string()
+    }
+
+    /// Verifies the Dr. Squatch listing against a saved official page carrying `deadline_sentence`.
+    fn confirm_squatch(&self, deadline_sentence: &str) -> Value {
+        let id = self.squatch_id();
+        self.owner(
+            "opportunities.confirm_official",
+            json!({"id": id, "url": OFFICIAL_URL, "html": official_page(deadline_sentence)}),
+        )
     }
 }
 
@@ -96,47 +108,59 @@ fn unknown_op_and_bad_passphrase() {
 #[test]
 fn snapshot_import_ingests_dedupes_and_verifies() {
     let h = harness();
-    h.import_ftc();
-    let list = h.owner("opportunities.list", json!({"q": "walmart", "include": []}));
+    h.import_listing();
+    let list = h.owner("opportunities.list", json!({"q": "squatch", "include": []}));
     assert!(list["pagination"].is_null(), "pagination is lifted into the envelope");
     let w = &list["items"][0];
-    assert_eq!(w["verification_state"], "verified");
-    assert_eq!(w["status"], "automatic_distribution");
-    assert_eq!(w["trust"]["primary_source"], true);
-    let id = w["id"].as_str().unwrap();
-    // Re-importing the same detail page must not duplicate or change anything.
-    let before: i64 = list["items"].as_array().unwrap().len() as i64;
+    assert_eq!(w["verification_state"], "verification_pending", "a third-party listing is a lead");
+    assert_eq!(w["status"], "open");
+    assert_eq!(w["deadline_verified"], false);
+    assert_eq!(w["trust"]["primary_source"], false);
+    assert_eq!(w["claim_url"], OFFICIAL_URL);
+    let id = w["id"].as_str().unwrap().to_string();
+    // Re-importing the same listing must not duplicate.
+    let total = h.owner("opportunities.list", json!({"limit": 100}))["items"].as_array().unwrap().len();
     h.owner(
         "sources.import_snapshot",
-        json!({"source_id": "ftc-refunds", "url": "https://www.ftc.gov/enforcement/refunds/walmart-refunds", "html": FTC_WALMART}),
+        json!({"source_id": "classaction-org", "url": LISTING_URL, "html": LISTING}),
     );
-    let again = h.owner("opportunities.list", json!({"q": "walmart"}));
-    assert_eq!(again["items"].as_array().unwrap().len() as i64, before);
+    assert_eq!(h.owner("opportunities.list", json!({"limit": 100}))["items"].as_array().unwrap().len(), total);
     let show = h.owner("opportunities.show", json!({"id": id, "include": ["provenance", "rules"]}));
     assert!(show["provenance"]["evidence"].as_array().unwrap().len() >= 3);
     assert_eq!(show["provenance"]["evidence"][0]["excerpt"]["trust"], "untrusted_source_text");
     assert!(show["rules"]["rules"].is_null());
-    // Changed deadline on the official page is recorded as a change.
-    let changed = FTC_WALMART.replace(
-        "If you get a check, please cash it within 90 days.",
-        "Eligible consumers must file a claim by March 3, 2027.",
+    // The official site must name the settlement; an unrelated page is not a confirmation.
+    let no = h.owner(
+        "opportunities.confirm_official",
+        json!({"id": id, "url": OFFICIAL_URL, "html": "<html><body><h1>Welcome</h1></body></html>"}),
     );
-    h.owner(
-        "sources.import_snapshot",
-        json!({"source_id": "ftc-refunds", "url": "https://www.ftc.gov/enforcement/refunds/walmart-refunds", "html": changed}),
+    assert_eq!(no["confirmed"], false);
+    assert_eq!(
+        h.owner("opportunities.show", json!({"id": id}))["opportunity"]["verification_state"],
+        "verification_pending"
     );
+    // A page on another domain is refused outright.
+    let e = h.owner_err(
+        "opportunities.confirm_official",
+        json!({"id": id, "url": "https://evil.example/", "html": official_page("")}),
+    );
+    assert_eq!(e.code, ErrorCode::PolicyBlocked);
+    // The real official page confirms it and carries the verified deadline.
+    let yes = h.confirm_squatch("Claims must be submitted online by March 3, 2027.");
+    assert_eq!(yes["confirmed"], true);
+    assert_eq!(yes["deadline"], "2027-03-03");
+    let w = h.owner("opportunities.show", json!({"id": id}))["opportunity"].clone();
+    assert_eq!(w["verification_state"], "verified");
+    assert_eq!(w["claim_deadline"], "2027-03-03");
+    assert_eq!(w["deadline_verified"], true);
     let changes = h.owner("opportunities.changes", json!({"id": id}));
-    let fields: Vec<&str> = changes["changes"].as_array().unwrap().iter().map(|c| c["field"].as_str().unwrap()).collect();
-    assert!(fields.contains(&"claim_deadline") && fields.contains(&"status"), "{fields:?}");
-    let w = h.owner("opportunities.show", json!({"id": id}));
-    assert_eq!(w["opportunity"]["claim_deadline"], "2027-03-03");
-    assert_eq!(w["opportunity"]["status"], "open");
+    assert!(changes["changes"].as_array().unwrap().iter().any(|c| c["field"] == "claim_deadline"));
 }
 
 #[test]
 fn filter_dsl_and_pagination_cursor() {
     let h = harness();
-    h.import_ftc();
+    h.import_listing();
     let page1 = h.svc.execute(Request::new("opportunities.list", json!({"filter": "sort=title", "limit": 5})));
     assert!(page1.ok);
     let p = page1.pagination.clone().unwrap();
@@ -170,7 +194,7 @@ fn dry_run_never_commits() {
     assert!(env.warnings.iter().any(|w| w.contains("dry run")));
     let people = h.owner("people.list", json!({}));
     assert_eq!(people["items"].as_array().unwrap().len(), 0);
-    let mut req = Request::new("sources.refresh", json!({"source_id": "naupa-directory", "force": true})).with_session(&h.session);
+    let mut req = Request::new("sources.refresh", json!({"source_id": "classaction-org", "force": true})).with_session(&h.session);
     req.dry_run = true;
     let env = h.svc.execute(req);
     assert!(env.ok, "{env:?}");
@@ -244,8 +268,8 @@ fn agent_scopes_and_approval_lifecycle() {
 #[test]
 fn approved_action_runs_once_and_is_digest_bound() {
     let h = harness();
-    h.import_ftc();
-    let opp = h.walmart_id();
+    h.import_listing();
+    let opp = h.squatch_id();
     let token = h.register_agent("curator", &["opportunities.read", "opportunities.write"]);
     // Elevated op with scope still needs approval.
     let env = h.agent(&token, "opportunities.verify", json!({"id": opp, "state": "disputed", "note": "looks stale"}));
@@ -295,17 +319,10 @@ fn revoked_agent_is_locked_out() {
 #[tokio::test]
 async fn matching_claims_and_alerts_flow() {
     let h = harness();
-    h.import_ftc();
-    let opp = h.walmart_id();
-    // Make the deadline verifiable and in the future.
-    let changed = FTC_WALMART.replace(
-        "If you get a check, please cash it within 90 days.",
-        "Eligible consumers must file a claim by December 1, 2099.",
-    );
-    h.owner(
-        "sources.import_snapshot",
-        json!({"source_id": "ftc-refunds", "url": "https://www.ftc.gov/enforcement/refunds/walmart-refunds", "html": changed}),
-    );
+    h.import_listing();
+    let opp = h.squatch_id();
+    // Verify against the official site so the deadline counts.
+    assert_eq!(h.confirm_squatch("You must file a claim by December 1, 2099.")["confirmed"], true);
     let person = h.owner(
         "people.create",
         json!({"display_name": "Ann", "details": {"emails": ["ann@example.test"], "mailing_address": "1 Main St"}, "consent": {"authorized_by_adult": true}}),
@@ -322,10 +339,10 @@ async fn matching_claims_and_alerts_flow() {
     assert_eq!(m["assessment"]["state"], "manual_review");
     // Curate rules from the official text.
     let rules = json!({"rules": [
-        {"id": "transfer", "label": "Completed a money transfer at Walmart in the class period", "criterion": {"kind": "consumer_fact", "fact_type": "service", "merchant": "Walmart", "during": {"start": "2015-01-01", "end": "2024-12-31"}}, "source_excerpt": "people who completed eligible money transfers at Walmart between January 2015 and December 2024", "source_locator": "https://www.ftc.gov/enforcement/refunds/walmart-refunds#p1"},
-        {"id": "us", "label": "US resident", "criterion": {"kind": "resided_in", "jurisdictions": ["US", "TX", "CA"], "during": null}, "source_excerpt": "checks to people", "source_locator": "https://www.ftc.gov/enforcement/refunds/walmart-refunds#p1"}
+        {"id": "purchase", "label": "Bought a Dr. Squatch product in the class period", "criterion": {"kind": "consumer_fact", "fact_type": "purchase", "merchant": "Dr. Squatch", "during": {"start": "2018-11-01", "end": "2026-08-29"}}, "source_excerpt": "if you bought certain Dr. Squatch products between November 1, 2018 and August 29, 2026", "source_locator": "https://www.personalcareproductssettlement.com/#class"},
+        {"id": "us", "label": "US resident", "criterion": {"kind": "resided_in", "jurisdictions": ["US", "TX", "CA"], "during": null}, "source_excerpt": "United States residents", "source_locator": "https://www.personalcareproductssettlement.com/#class"}
     ], "one_claim_per": "person"});
-    h.owner("opportunities.set_rules", json!({"opportunity_id": opp, "rules": rules, "original_text_excerpt": "The FTC is sending checks to people who completed eligible money transfers at Walmart between January 2015 and December 2024."}));
+    h.owner("opportunities.set_rules", json!({"opportunity_id": opp, "rules": rules, "original_text_excerpt": "You may be able to claim a piece of this settlement if you bought certain Dr. Squatch products between November 1, 2018 and August 29, 2026."}));
     let m = h.owner("match.evaluate", json!({"person_id": person, "opportunity_id": opp}));
     assert_eq!(m["assessment"]["state"], "needs_more_information");
     let missing = h.owner("match.missing", json!({"person_id": person}));
@@ -336,7 +353,7 @@ async fn matching_claims_and_alerts_flow() {
         .agent(
             &token,
             "facts.propose",
-            json!({"person_id": person, "proposal": {"fact_type": "service", "merchant": "Walmart", "start": "2020-05-05", "end": "2020-05-05"}}),
+            json!({"person_id": person, "proposal": {"fact_type": "purchase", "merchant": "Dr. Squatch", "start": "2020-05-05", "end": "2020-05-05"}}),
         )
         .data
         .unwrap();
@@ -344,9 +361,13 @@ async fn matching_claims_and_alerts_flow() {
     let m = h.owner("match.evaluate", json!({"person_id": person, "opportunity_id": opp}));
     assert_eq!(m["assessment"]["state"], "needs_more_information");
     assert!(
-        h.agent(&token, "facts.add", json!({"person_id": person, "fact_type": "service", "merchant": "Walmart"}))
-            .error
-            .is_some()
+        h.agent(
+            &token,
+            "facts.add",
+            json!({"person_id": person, "fact_type": "purchase", "merchant": "Dr. Squatch"})
+        )
+        .error
+        .is_some()
     );
     h.owner("facts.confirm", json!({"id": prop["proposal_id"]}));
     let m = h.owner("match.evaluate", json!({"person_id": person, "opportunity_id": opp}));
@@ -377,7 +398,7 @@ async fn matching_claims_and_alerts_flow() {
             .contains("cannot be prefilled")
     );
     let hand = h.owner("claims.handoff", json!({"claim_id": claim}));
-    assert_eq!(hand["open_url"], "https://www.ftc.gov/enforcement/refunds/walmart-refunds");
+    assert_eq!(hand["open_url"], OFFICIAL_URL);
     // Extension principal gets prefill only for the allowed domain.
     let ext = h.owner("agents.register", json!({"name": "ext", "kind": "extension", "scopes": ["extension.prefill"]}))["token"]
         .as_str()
@@ -387,7 +408,11 @@ async fn matching_claims_and_alerts_flow() {
     let bad = h.agent(&ext, "claims.prefill_package", json!({"package_id": pkg, "origin": "https://evil.example"}));
     assert_eq!(bad.error.unwrap().code, ErrorCode::PolicyBlocked);
     let good = h
-        .agent(&ext, "claims.prefill_package", json!({"package_id": pkg, "origin": "https://www.ftc.gov"}))
+        .agent(
+            &ext,
+            "claims.prefill_package",
+            json!({"package_id": pkg, "origin": "https://www.personalcareproductssettlement.com"}),
+        )
         .data
         .unwrap();
     assert_eq!(good["prefill"]["email"], "ann@example.test");
@@ -510,13 +535,13 @@ async fn jobs_and_document_extraction() {
 #[tokio::test]
 async fn workflows_pause_for_approval_and_resume() {
     let h = harness();
-    h.import_ftc();
+    h.import_listing();
     let def = json!({
         "schema_version": 1,
-        "name": "mark-walmart",
+        "name": "mark-squatch",
         "permissions": ["opportunities.read", "opportunities.write"],
         "steps": [
-            {"id": "find", "operation": "opportunities.list", "with": {"q": "walmart"}},
+            {"id": "find", "operation": "opportunities.list", "with": {"q": "squatch"}},
             {"id": "mark", "operation": "opportunities.bookmark", "with": {"id": "${steps.find.data.items.0.id}"}, "after": ["find"]},
             {"id": "never", "operation": "opportunities.hide", "with": {"id": "x"}, "when": {"step": "find", "path": "items.0.title", "equals": "no such"}}
         ]
@@ -530,20 +555,20 @@ async fn workflows_pause_for_approval_and_resume() {
     assert_eq!(plan["order"], json!(["find", "mark", "never"]));
     h.owner("workflows.register", json!({"definition": def}));
     // Owner run completes end to end.
-    let run = h.owner("workflows.run", json!({"name": "mark-walmart"}));
+    let run = h.owner("workflows.run", json!({"name": "mark-squatch"}));
     h.svc.drain_jobs().await;
     let st = h.owner("workflows.status", json!({"run_id": run["run_id"]}));
     assert_eq!(st["state"], "succeeded", "{st}");
     assert_eq!(st["checkpoint"]["skipped"], json!(["never"]));
-    let w = h.owner("opportunities.list", json!({"q": "walmart"}));
+    let w = h.owner("opportunities.list", json!({"q": "squatch"}));
     assert_eq!(w["items"][0]["bookmarked"], true);
     // Agent run pauses for approval on the write step, then resumes after approval.
     let token = h.register_agent("flow", &["opportunities.read", "opportunities.write", "workflows.run", "jobs.read"]);
-    let run = h.agent(&token, "workflows.run", json!({"name": "mark-walmart"})).data.unwrap();
+    let run = h.agent(&token, "workflows.run", json!({"name": "mark-squatch"})).data.unwrap();
     h.svc.drain_jobs().await;
     let st = h.agent(&token, "workflows.status", json!({"run_id": run["run_id"]})).data.unwrap();
     assert_eq!(st["state"], "succeeded", "write with scope needs no approval: {st}");
-    let def2 = json!({"schema_version": 1, "name": "gated", "permissions": ["opportunities.read", "opportunities.write"], "steps": [{"id": "mark", "operation": "opportunities.hide", "with": {"id": h.walmart_id()}, "approval": true}]});
+    let def2 = json!({"schema_version": 1, "name": "gated", "permissions": ["opportunities.read", "opportunities.write"], "steps": [{"id": "mark", "operation": "opportunities.hide", "with": {"id": h.squatch_id()}, "approval": true}]});
     h.owner("workflows.register", json!({"definition": def2}));
     let run = h.agent(&token, "workflows.run", json!({"name": "gated"})).data.unwrap();
     h.svc.drain_jobs().await;
@@ -555,33 +580,6 @@ async fn workflows_pause_for_approval_and_resume() {
     h.svc.drain_jobs().await;
     let st = h.agent(&token, "workflows.status", json!({"run_id": run["run_id"]})).data.unwrap();
     assert_eq!(st["state"], "succeeded", "{st}");
-}
-
-#[test]
-fn property_directory_is_seeded_and_private_checklist_works() {
-    let h = harness();
-    let states = h.svc.execute(Request::new("property.states", json!({"kind": "us_state"}))).data.unwrap();
-    assert_eq!(states["items"].as_array().unwrap().len(), 51);
-    let person = h.owner("people.create", json!({"display_name": "Mover"}))["id"].as_str().unwrap().to_string();
-    h.owner(
-        "people.add_residence",
-        json!({"person_id": person, "jurisdiction": "ca", "start": "2001-01-01", "end": "2010-01-01"}),
-    );
-    h.owner(
-        "people.add_residence",
-        json!({"person_id": person, "jurisdiction": "NY", "start": "2010-01-02"}),
-    );
-    let cl = h.owner("property.checklist", json!({"person_id": person}));
-    assert_eq!(cl["steps"].as_array().unwrap().len(), 2);
-    h.owner("property.research", json!({"person_id": person}));
-    h.owner(
-        "property.track",
-        json!({"person_id": person, "jurisdiction": "CA", "status": "possible_match", "note": "saw my old address"}),
-    );
-    let hist = h.owner("property.history", json!({"person_id": person}));
-    let ca = hist["items"].as_array().unwrap().iter().find(|i| i["jurisdiction"] == "CA").unwrap();
-    assert_eq!(ca["status"], "possible_match");
-    assert_eq!(ca["note"], "saw my old address");
 }
 
 #[test]
@@ -649,13 +647,13 @@ async fn failed_refresh_is_recorded_in_source_health() {
     // Bypass the offline guard in sources.refresh by enqueueing the job directly, as the scheduler would.
     h.owner(
         "jobs.enqueue",
-        json!({"kind": "source_refresh", "params": {"source_id": "naupa-directory", "force": true}}),
+        json!({"kind": "source_refresh", "params": {"source_id": "classaction-org", "force": true}}),
     );
     h.svc.drain_jobs().await;
     let health = h.owner("sources.health", json!({}));
-    let naupa = health["items"].as_array().unwrap().iter().find(|s| s["id"] == "naupa-directory").unwrap();
-    assert_eq!(naupa["last_failure"], "offline", "{naupa}");
-    assert_eq!(naupa["health"], "degraded");
+    let src = health["items"].as_array().unwrap().iter().find(|s| s["id"] == "classaction-org").unwrap();
+    assert_eq!(src["last_failure"], "offline", "{src}");
+    assert_eq!(src["health"], "degraded");
     let jobs = h.owner("jobs.list", json!({"kind": "source_refresh"}));
     assert_eq!(jobs["items"][0]["state"], "failed");
     assert_eq!(jobs["items"][0]["error_code"], "POLICY_BLOCKED");

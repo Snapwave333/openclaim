@@ -164,38 +164,6 @@ CREATE TABLE tips (
     created_at     TEXT NOT NULL
 );
 
--- ------------------------------------------------------ unclaimed property
-CREATE TABLE property_programs (
-    jurisdiction  TEXT PRIMARY KEY,
-    name          TEXT NOT NULL,
-    official_url  TEXT NOT NULL,
-    kind          TEXT NOT NULL,
-    snapshot_id   TEXT,
-    automated_search INTEGER NOT NULL DEFAULT 0,
-    instructions  TEXT NOT NULL,
-    verified_at   TEXT NOT NULL
-);
-
-CREATE TABLE property_tracking (
-    id            TEXT PRIMARY KEY,
-    person_id     TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
-    jurisdiction  TEXT NOT NULL,
-    status        TEXT NOT NULL CHECK (status IN ('to_search','searched_no_match','possible_match','claim_started','claim_submitted','paid','not_mine')),
-    heir_claim    INTEGER NOT NULL DEFAULT 0,
-    notes_enc     TEXT,
-    updated_at    TEXT NOT NULL,
-    version       INTEGER NOT NULL DEFAULT 1,
-    UNIQUE (person_id, jurisdiction)
-);
-
-CREATE TABLE property_events (
-    id          TEXT PRIMARY KEY,
-    tracking_id TEXT NOT NULL REFERENCES property_tracking(id) ON DELETE CASCADE,
-    status      TEXT NOT NULL,
-    recorded_by TEXT NOT NULL,
-    at          TEXT NOT NULL
-);
-
 -- -------------------------------------------------------------- people
 CREATE TABLE people (
     id                        TEXT PRIMARY KEY,

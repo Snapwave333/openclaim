@@ -394,6 +394,24 @@ pub const COMMANDS: &[CmdSpec] = &[
     },
     CmdSpec {
         group: "opportunities",
+        name: "verify-official",
+        op: "opportunities.verify_official",
+        about: "Check the listing against its official settlement site (queues one fetch)",
+        args: &[pos("id", "id", "Opportunity id")],
+    },
+    CmdSpec {
+        group: "opportunities",
+        name: "confirm-official",
+        op: "opportunities.confirm_official",
+        about: "Verify from a copy of the official page you saved",
+        args: &[
+            pos("id", "id", "Opportunity id"),
+            req("url", "url", "Official page URL"),
+            file("file", "html", "Saved HTML file"),
+        ],
+    },
+    CmdSpec {
+        group: "opportunities",
         name: "verify",
         op: "opportunities.verify",
         about: "Owner review of verification state",
@@ -1020,66 +1038,6 @@ pub const COMMANDS: &[CmdSpec] = &[
         about: "Packages prepared for a site origin (ids only)",
         args: &[req("origin", "origin", "https://host")],
     },
-    // --- property
-    CmdSpec {
-        group: "property",
-        name: "states",
-        op: "property.states",
-        about: "Official unclaimed-property programs",
-        args: &[opt("kind", "kind", "us_state | us_territory | multi_state | federal | canada | other")],
-    },
-    CmdSpec {
-        group: "property",
-        name: "official-links",
-        op: "property.official_links",
-        about: "Links for jurisdictions",
-        args: &[multi("jurisdictions", "jurisdictions", "State codes")],
-    },
-    CmdSpec {
-        group: "property",
-        name: "checklist",
-        op: "property.checklist",
-        about: "Private per-person checklist",
-        args: &[req("person", "person_id", "Person id")],
-    },
-    CmdSpec {
-        group: "property",
-        name: "research",
-        op: "property.research",
-        about: "Create tracking rows from residence history",
-        args: &[req("person", "person_id", "Person id")],
-    },
-    CmdSpec {
-        group: "property",
-        name: "track",
-        op: "property.track",
-        about: "Record a search result",
-        args: &[
-            req("person", "person_id", "Person id"),
-            req("jurisdiction", "jurisdiction", "State code"),
-            req(
-                "status",
-                "status",
-                "to_search | searched_no_match | possible_match | claim_started | claim_submitted | paid | not_mine",
-            ),
-            opt("note", "note", "Note"),
-            flag("heir", "heir_claim", "Heir claim"),
-        ],
-    },
-    CmdSpec {
-        group: "property",
-        name: "history",
-        op: "property.history",
-        about: "Tracking history",
-        args: &[req("person", "person_id", "Person id")],
-    },
-    CmdSpec {
-        group: "property",
-        name: "heir-checklist",
-        op: "property.heir_checklist",
-        about: "Guided heir checklist",
-        args: &[],
-    },
     // --- alerts
     CmdSpec {
         group: "alerts",
@@ -1104,7 +1062,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         op: "alerts.add",
         about: "Custom reminder",
         args: &[
-            req("kind", "subject_kind", "opportunity | claim | property | custom"),
+            req("kind", "subject_kind", "opportunity | claim | custom"),
             req("title", "title", "Title"),
             req("due", "due_at", "YYYY-MM-DD or RFC 3339"),
             opt("subject", "subject_id", "Subject id"),
@@ -1608,7 +1566,6 @@ pub const GROUP_ABOUT: &[(&str, &str)] = &[
     ("facts", "Confirmed facts and agent proposals"),
     ("documents", "Encrypted evidence vault"),
     ("claims", "Claim tracking and filing assistance (you submit)"),
-    ("property", "Unclaimed-property directory and checklists"),
     ("alerts", "Deadline reminders"),
     ("jobs", "Durable background jobs"),
     ("workflows", "Declarative multi-step runs"),

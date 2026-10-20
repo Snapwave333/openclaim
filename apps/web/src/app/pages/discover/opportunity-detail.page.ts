@@ -35,6 +35,9 @@ const TABS: Array<[Tab, string]> = [['summary', 'Summary'], ['eligibility', 'Eli
         <div class="row">
           <button class="btn" type="button" [attr.aria-pressed]="d.opportunity.bookmarked" (click)="toggle('opportunities.bookmark', !d.opportunity.bookmarked)">{{ d.opportunity.bookmarked ? '★ Bookmarked' : '☆ Bookmark' }}</button>
           <button class="btn btn--ghost" type="button" (click)="toggle('opportunities.hide', !d.opportunity.hidden)">{{ d.opportunity.hidden ? 'Unhide' : 'Hide' }}</button>
+          @if (d.opportunity.verification_state !== 'verified' && d.opportunity.official_url) {
+            <button class="btn btn--ghost" type="button" (click)="verifyOfficial()" data-action="verify-official" [disabled]="busy()">Verify on official site</button>
+          }
         </div>
       </header>
 
@@ -214,6 +217,15 @@ export class OpportunityDetailPage implements OnInit {
       const list = await this.api.op<Paged<Claim>>('claims.list', { limit: 200 });
       this.claim.set((list.items ?? []).find((c) => c.opportunity_id === this.id() && (!pid || c.person_id === pid)) ?? null);
     } catch { this.claim.set(null); }
+  }
+
+  /** Queues one fetch of the settlement's own site; the record turns verified only if that page names it. */
+  async verifyOfficial(): Promise<void> {
+    this.busy.set(true);
+    try {
+      const r = await this.api.op<{ job_id: string; official_url: string }>('opportunities.verify_official', { id: this.id() });
+      this.toast.show(`Checking ${r.official_url} (job ${r.job_id.slice(0, 8)}…). The record updates when the fetch finishes.`);
+    } catch (e) { this.toast.error(e); } finally { this.busy.set(false); }
   }
 
   async toggle(op: string, on: boolean): Promise<void> {

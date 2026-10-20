@@ -10,7 +10,7 @@ import { PageHeaderComponent } from '../../shared/page-header.component';
 interface Integrity { ok: boolean; quick_check: string; foreign_key_violations: number; audit_entries: number; audit_broken_at: number | null; documents_missing_files: number; recommendation: string }
 
 const EDITABLE: Array<{ key: string; label: string; type: 'text' | 'bool' | 'number' | 'list' }> = [
-  { key: 'network.contact', label: 'Network contact (User-Agent for SEC.gov)', type: 'text' },
+  { key: 'network.contact', label: 'Network contact (declared in the User-Agent)', type: 'text' },
   { key: 'network.offline', label: 'Offline mode (no network requests)', type: 'bool' },
   { key: 'vault.ocr', label: 'Use local Tesseract OCR when available', type: 'bool' },
   { key: 'vault.index_text', label: 'Index extracted text for local search', type: 'bool' },

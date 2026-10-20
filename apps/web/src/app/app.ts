@@ -12,7 +12,6 @@ const NAV: NavItem[] = [
   { path: '/discover', label: 'Discover', icon: '⌕' },
   { path: '/matches', label: 'My Matches', icon: '≡' },
   { path: '/claims', label: 'Claims', icon: '✎' },
-  { path: '/property', label: 'Property Search', icon: '⌂' },
   { path: '/vault', label: 'Evidence Vault', icon: '▣' },
   { path: '/sources', label: 'Sources', icon: '⊕' },
   { path: '/agents', label: 'Agent Activity', icon: '⚙' },

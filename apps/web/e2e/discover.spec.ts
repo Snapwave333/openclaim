@@ -16,11 +16,13 @@ test.describe('login → discover → detail → bookmark', () => {
   });
   test.afterAll(async () => { await context.close(); });
 
-  test('discover shows the seeded Walmart record with a verified badge and full trust display', async () => {
+  test('discover shows the seeded Dr. Squatch record with a verified badge and full trust display', async () => {
     await page.getByRole('link', { name: 'Discover' }).click();
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
+    await page.locator('#q').fill('Squatch');
+    await page.getByRole('button', { name: 'Search' }).click();
 
-    const card = page.locator('[data-opportunity-id]').filter({ hasText: 'Walmart Refunds' }).first();
+    const card = page.locator('[data-opportunity-id]').filter({ hasText: 'Dr. Squatch - All Natural Claims' }).first();
     await expect(card).toBeVisible();
     await expect(card.locator('.badge').filter({ hasText: 'verified' }).first()).toBeVisible();
     await expect(card.locator('[data-field="primary_source"]')).toHaveText(/Yes/);
@@ -28,21 +30,21 @@ test.describe('login → discover → detail → bookmark', () => {
     await expect(card.locator('[data-field="claim_deadline"]')).toContainText(/Unknown|verified/);
     await expect(card.locator('[data-field="eligibility_note"]')).toContainText('Eligibility still requires review');
     const source = card.locator('[data-action="view-source"]');
-    await expect(source).toHaveAttribute('href', /ftc\.gov/);
+    await expect(source).toHaveAttribute('href', /personalcareproductssettlement\.com/);
     await expect(source).toHaveAttribute('target', '_blank');
     await expect(source).toHaveAttribute('rel', /noopener/);
     await expect(card.locator('[data-action="mark-uncertain"]')).toBeVisible();
   });
 
   test('bookmark toggles through opportunities.bookmark and is reflected after reload', async () => {
-    const card = page.locator('[data-opportunity-id]').filter({ hasText: 'Walmart Refunds' }).first();
+    const card = page.locator('[data-opportunity-id]').filter({ hasText: 'Dr. Squatch - All Natural Claims' }).first();
     const bookmark = card.locator('[data-action="bookmark"]');
     const wasPressed = (await bookmark.getAttribute('aria-pressed')) === 'true';
     await bookmark.click();
     await expect(bookmark).toHaveAttribute('aria-pressed', String(!wasPressed));
     // The daemon persisted it: re-run the search and check the state survived
     await page.getByRole('button', { name: 'Search' }).click();
-    const again = page.locator('[data-opportunity-id]').filter({ hasText: 'Walmart Refunds' }).first().locator('[data-action="bookmark"]');
+    const again = page.locator('[data-opportunity-id]').filter({ hasText: 'Dr. Squatch - All Natural Claims' }).first().locator('[data-action="bookmark"]');
     await expect(again).toHaveAttribute('aria-pressed', String(!wasPressed));
     // Put it back so the seed stays stable
     await again.click();
@@ -50,9 +52,9 @@ test.describe('login → discover → detail → bookmark', () => {
   });
 
   test('detail page shows provenance excerpts in the untrusted-text style and a match explanation', async () => {
-    const card = page.locator('[data-opportunity-id]').filter({ hasText: 'Walmart Refunds' }).first();
-    await card.getByRole('link', { name: 'Walmart Refunds' }).click();
-    await expect(page.getByRole('heading', { name: 'Walmart Refunds', level: 1 })).toBeVisible();
+    const card = page.locator('[data-opportunity-id]').filter({ hasText: 'Dr. Squatch - All Natural Claims' }).first();
+    await card.getByRole('link', { name: 'Dr. Squatch - All Natural Claims' }).click();
+    await expect(page.getByRole('heading', { name: 'Dr. Squatch - All Natural Claims', level: 1 })).toBeVisible();
     await expect(page.locator('.badge').filter({ hasText: 'verified' }).first()).toBeVisible();
 
     await page.getByRole('tab', { name: 'Supporting sources' }).click();

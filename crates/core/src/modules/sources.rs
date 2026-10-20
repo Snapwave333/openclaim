@@ -8,7 +8,7 @@ use crate::ops::OpSpec;
 use crate::sql::{exec, query_all, query_one, require, scalar};
 use openclaim_db::rusqlite::Connection;
 use openclaim_discovery::manifest::{AuthRequirement, ConnectorManifest};
-use openclaim_discovery::parse::{ParsedOpportunity, ParsedProgram, ParsedTip};
+use openclaim_discovery::parse::{ParsedOpportunity, ParsedTip};
 use openclaim_domain::model::{AuthorityTier, FetchFailure, OpportunityStatus, SourceHealth, VerificationState, dedupe_key, same_settlement};
 use openclaim_domain::{OcError, OcResult};
 use openclaim_security::digest::sha256_hex;
@@ -133,7 +133,6 @@ pub struct IngestSummary {
     pub updated: u32,
     pub merged: u32,
     pub changes: u32,
-    pub programs: u32,
     pub tips: u32,
 }
 
@@ -157,7 +156,6 @@ pub fn ingest(
     snapshot_id: &str,
     tier: AuthorityTier,
     records: &[ParsedOpportunity],
-    programs: &[ParsedProgram],
     tips: &[ParsedTip],
     now: &str,
 ) -> OcResult<IngestSummary> {
@@ -206,16 +204,6 @@ pub fn ingest(
         insert_opportunity(conn, source_id, r, tier, &key, snapshot_id, now)?;
         s.inserted += 1;
     }
-    for p in programs {
-        exec(
-            conn,
-            "INSERT INTO property_programs(jurisdiction, name, official_url, kind, snapshot_id, automated_search, instructions, verified_at)
-             VALUES (?1,?2,?3,?4,?5,0,?6,?7)
-             ON CONFLICT(jurisdiction) DO UPDATE SET name = excluded.name, official_url = excluded.official_url, kind = excluded.kind, snapshot_id = excluded.snapshot_id, verified_at = excluded.verified_at",
-            (&p.jurisdiction, &p.name, &p.official_url, &p.kind, snapshot_id, crate::modules::property::instructions_for(&p.kind), now),
-        )?;
-        s.programs += 1;
-    }
     for t in tips {
         let exists: Option<String> = scalar(conn, "SELECT id FROM tips WHERE url = ?1", [&t.url])?;
         if exists.is_none() {
@@ -257,7 +245,7 @@ fn insert_opportunity(
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?25,?26)",
         openclaim_db::rusqlite::params![
             id, source_id, r.external_key, key, r.title, r.opp_type.as_str(), r.administrator, r.administrator_phone, r.case_number, r.official_url, r.claim_url,
-            r.status.as_str(), vs.as_str(), tier.as_str(), r.claim_deadline, r.claim_deadline.is_some() as i32, r.class_period_start, r.class_period_end,
+            r.status.as_str(), vs.as_str(), tier.as_str(), r.claim_deadline, (r.claim_deadline.is_some() && r.terms_confirmed) as i32, r.class_period_start, r.class_period_end,
             serde_json::to_string(&r.jurisdictions)?, r.summary, serde_json::to_string(&r.benefit)?, r.proof_required.as_str(), r.claim_method, r.source_updated_on, now,
             if vs == VerificationState::Verified { Some(now) } else { None }
         ],
@@ -293,7 +281,7 @@ fn update_opportunity(conn: &Connection, id: &str, r: &ParsedOpportunity, tier: 
              WHERE id = ?1",
             openclaim_db::rusqlite::params![
                 id, r.title, r.administrator, r.administrator_phone, r.case_number, r.official_url, r.claim_url, r.status.as_str(), vs.as_str(), r.claim_deadline,
-                r.claim_deadline.is_some() as i32, r.class_period_start, r.class_period_end, r.summary, serde_json::to_string(&r.benefit)?, r.proof_required.as_str(), r.claim_method,
+                (r.claim_deadline.is_some() && r.terms_confirmed) as i32, r.class_period_start, r.class_period_end, r.summary, serde_json::to_string(&r.benefit)?, r.proof_required.as_str(), r.claim_method,
                 r.source_updated_on, now
             ],
         )?;
@@ -718,9 +706,9 @@ pub fn import_snapshot(ctx: &mut Ctx<'_>, p: ImportSnapshotParams, acquisition: 
         (None, None) => return Err(OcError::invalid("provide html or file")),
     };
     let today = openclaim_domain::dates::today_utc();
-    let (opps, programs, tips) = openclaim_discovery::run::parse_page(m.connector, &p.url, &html, today).map_err(OcError::invalid)?;
+    let (opps, _programs, tips) = openclaim_discovery::run::parse_page(m.connector, &p.url, &html, today).map_err(OcError::invalid)?;
     let (snapshot_id, _changed) = record_snapshot(ctx.conn, &p.source_id, &p.url, &html, acquisition, None, &ctx.now)?;
-    let summary = ingest(ctx.conn, &p.source_id, &snapshot_id, m.authority_tier, &opps, &programs, &tips, &ctx.now)?;
+    let summary = ingest(ctx.conn, &p.source_id, &snapshot_id, m.authority_tier, &opps, &tips, &ctx.now)?;
     exec(
         ctx.conn,
         "UPDATE sources SET last_ok_at = ?2 WHERE id = ?1 AND health IN ('blocked','never_fetched','degraded')",
@@ -731,9 +719,7 @@ pub fn import_snapshot(ctx: &mut Ctx<'_>, p: ImportSnapshotParams, acquisition: 
         &p.source_id,
         json!({"url": p.url, "acquisition": acquisition, "records": opps.len()}),
     )?;
-    Ok(
-        json!({"snapshot_id": snapshot_id, "parsed": opps.len(), "programs": programs.len(), "tips": tips.len(), "summary": summary, "acquisition": acquisition}),
-    )
+    Ok(json!({"snapshot_id": snapshot_id, "parsed": opps.len(), "tips": tips.len(), "summary": summary, "acquisition": acquisition}))
 }
 
 fn op_import_snapshot(ctx: &mut Ctx<'_>, p: Value) -> OcResult<Value> {

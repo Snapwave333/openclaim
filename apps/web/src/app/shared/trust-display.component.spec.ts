@@ -17,7 +17,7 @@ describe('TrustDisplayComponent', () => {
   let fixture: ComponentFixture<TrustDisplayComponent>;
   let http: HttpTestingController;
 
-  const render = async (trust: Trust, url: string | null = 'https://www.ftc.gov/x') => {
+  const render = async (trust: Trust, url: string | null = 'https://www.example-settlement.test/x') => {
     fixture = TestBed.createComponent(TrustDisplayComponent);
     fixture.componentRef.setInput('trust', trust);
     fixture.componentRef.setInput('officialUrl', url);
@@ -59,7 +59,7 @@ describe('TrustDisplayComponent', () => {
   it('links to the official source in a new tab with rel=noopener', async () => {
     const el = await render(base);
     const a = el.querySelector<HTMLAnchorElement>('[data-action="view-source"]');
-    expect(a?.getAttribute('href')).toBe('https://www.ftc.gov/x');
+    expect(a?.getAttribute('href')).toBe('https://www.example-settlement.test/x');
     expect(a?.getAttribute('target')).toBe('_blank');
     expect(a?.getAttribute('rel')).toContain('noopener');
   });

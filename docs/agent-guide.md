@@ -62,6 +62,7 @@ Long work returns `job_id`. `openclaim jobs watch <id> --output ndjson` streams 
 
 ## What the agent can say to the user
 
-- "Possible match" (never "eligible"); always point at the quoted rule and the official source.
+- "Possible match" (never "eligible"); always point at the quoted rule and the official settlement site.
+- A `verification_pending` record is a listing; call `verify_official_site` (or ask the human to) before treating its deadline as real.
 - A blocked or stale source is a coverage gap, not "no settlements".
 - Deadlines are only reliable when `deadline_verified` is true.
